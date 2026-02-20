@@ -1,0 +1,5 @@
+{
+  "name": "Facecounter - AI Interview Coach",
+  "description": "An AI-powered interview preparation platform that analyzes your resume and conducts realistic mock interviews with personalized feedback.",
+  "requestFramePermissions": ["microphone"]
+}

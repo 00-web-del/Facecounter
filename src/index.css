@@ -1,0 +1,30 @@
+@import url('https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@400;500;700;900&display=swap');
+@import "tailwindcss";
+
+@theme {
+  --font-display: "Noto Sans SC", "PingFang SC", "Microsoft YaHei", sans-serif;
+  --color-primary: #197fe6;
+  --color-background-light: #f6f7f8;
+  --color-background-dark: #111921;
+}
+
+@layer base {
+  body {
+    @apply font-display bg-background-light text-slate-900 antialiased;
+  }
+}
+
+@layer utilities {
+  .hide-scrollbar::-webkit-scrollbar {
+    display: none;
+  }
+  .hide-scrollbar {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+}
+
+/* Material Symbols */
+@import url('https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@400;500;700;900&display=swap');
