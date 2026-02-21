@@ -3,12 +3,22 @@ import { Type } from "@google/genai";
 export enum Screen {
   HOME = "HOME",
   LOGIN = "LOGIN",
+  SIGNUP = "SIGNUP",
+  ONBOARDING = "ONBOARDING",
   SETUP = "SETUP",
   INTERVIEW = "INTERVIEW",
   RESULT = "RESULT",
   ANALYSIS = "ANALYSIS",
   QUESTION_BANK = "QUESTION_BANK",
   SETTINGS = "SETTINGS",
+}
+
+export interface UserProfile {
+  name: string;
+  currentJob: string;
+  targetJob: string;
+  experience: string;
+  industry?: string;
 }
 
 export interface Message {

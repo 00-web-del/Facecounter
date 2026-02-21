@@ -35,7 +35,7 @@ import {
   Check,
   Lightbulb
 } from './components/Icons';
-import { Screen, Interview, Message } from './types';
+import { Screen, Interview, Message, UserProfile } from './types';
 import { getAIResponse, getInterviewFeedback } from './services/geminiService';
 import { 
   AreaChart, 
@@ -89,13 +89,30 @@ export default function App() {
   const [activeInterview, setActiveInterview] = useState<Interview | null>(null);
   const [isTyping, setIsTyping] = useState(false);
   const [inputText, setInputText] = useState('');
+  const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
   const chatEndRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const savedProfile = localStorage.getItem('user_profile');
+    if (savedProfile) {
+      setUserProfile(JSON.parse(savedProfile));
+    }
+  }, []);
+
+  const saveProfile = (profile: UserProfile) => {
+    setUserProfile(profile);
+    localStorage.setItem('user_profile', JSON.stringify(profile));
+  };
 
   useEffect(() => {
     chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [activeInterview?.messages, isTyping]);
 
   const startNewInterview = (role: string = '软件工程师') => {
+    const welcomeMsg = userProfile?.name 
+      ? `你好，${userProfile.name}！我是你的 AI 教练。今天我们将重点关注 ${role} 的面试。首先，你能告诉我一次你带领团队度过重大挑战的经历吗？`
+      : `你好！我是你的 AI 教练。今天我们将重点关注 ${role} 的面试。首先，你能告诉我一次你带领团队度过重大挑战的经历吗？`;
+
     const newInterview: Interview = {
       id: Date.now().toString(),
       role: role,
@@ -104,7 +121,7 @@ export default function App() {
         {
           id: '1',
           role: 'ai',
-          content: `你好！我是你的 AI 教练。今天我们将重点关注 ${role} 的面试。首先，你能告诉我一次你带领团队度过重大挑战的经历吗？`,
+          content: welcomeMsg,
           timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
         }
       ]
@@ -129,9 +146,21 @@ export default function App() {
     setIsTyping(true);
 
     try {
+      let systemPrompt = `你是一个专业的AI面试教练，名叫Facecounter。你的目标是帮助用户练习面试。请保持专业、鼓励且具有挑战性。目前的面试职位是：${activeInterview.role}。`;
+      
+      if (userProfile) {
+        systemPrompt += `\n用户信息：
+        - 姓名：${userProfile.name || '未提供'}
+        - 当前职位：${userProfile.currentJob || '未提供'}
+        - 目标职位：${userProfile.targetJob || '未提供'}
+        - 工作经验：${userProfile.experience || '未提供'}
+        
+        请根据用户的目标职位询问相关的面试问题。如果他们目标是产品经理，重点关注产品感、策略和行为面试题。偶尔可以称呼用户的名字。`;
+      }
+
       const aiResponseText = await getAIResponse(
         updatedMessages.map(m => ({ role: m.role, content: m.content })),
-        "你是一个专业的AI面试教练，名叫Facecounter。你的目标是帮助用户练习面试。请保持专业、鼓励且具有挑战性。目前的面试职位是：" + activeInterview.role
+        systemPrompt
       );
 
       const aiMessage: Message = {
@@ -182,7 +211,14 @@ export default function App() {
   const renderScreen = () => {
     switch (currentScreen) {
       case Screen.LOGIN:
-        return <LoginScreen onLogin={() => setCurrentScreen(Screen.HOME)} />;
+        return <LoginScreen onLogin={() => setCurrentScreen(Screen.HOME)} onGoToSignUp={() => setCurrentScreen(Screen.SIGNUP)} />;
+      case Screen.SIGNUP:
+        return <SignUpScreen onSignUp={() => setCurrentScreen(Screen.ONBOARDING)} onGoToLogin={() => setCurrentScreen(Screen.LOGIN)} />;
+      case Screen.ONBOARDING:
+        return <OnboardingScreen onComplete={(profile) => {
+          saveProfile(profile);
+          setCurrentScreen(Screen.HOME);
+        }} onSkip={() => setCurrentScreen(Screen.HOME)} />;
       case Screen.HOME:
         return <HomeScreen 
           interviews={interviews} 
@@ -257,7 +293,7 @@ export default function App() {
 
 // --- Sub-Screens ---
 
-function LoginScreen({ onLogin }: { onLogin: () => void }) {
+function LoginScreen({ onLogin, onGoToSignUp }: { onLogin: () => void, onGoToSignUp: () => void }) {
   return (
     <div className="flex flex-col items-center justify-center p-6 h-full">
       <div className="w-full bg-white rounded-2xl shadow-xl border border-slate-200 overflow-hidden">
@@ -301,8 +337,141 @@ function LoginScreen({ onLogin }: { onLogin: () => void }) {
           </button>
         </div>
         <div className="bg-slate-50 py-6 text-center border-t border-slate-200">
-          <p className="text-sm text-slate-500">还没有账号？ <button className="text-primary font-bold">立即注册</button></p>
+          <p className="text-sm text-slate-500">还没有账号？ <button onClick={onGoToSignUp} className="text-primary font-bold">立即注册</button></p>
         </div>
+      </div>
+    </div>
+  );
+}
+
+function SignUpScreen({ onSignUp, onGoToLogin }: { onSignUp: () => void, onGoToLogin: () => void }) {
+  return (
+    <div className="flex flex-col items-center justify-center p-6 h-full">
+      <div className="w-full bg-white rounded-2xl shadow-xl border border-slate-200 overflow-hidden">
+        <div className="p-8">
+          <div className="text-center mb-8">
+            <span className="text-primary font-bold tracking-tight text-sm uppercase">Facecounter</span>
+            <h1 className="text-3xl font-extrabold mt-4 mb-2">创建账号</h1>
+            <p className="text-slate-500">开启您的 AI 面试教练之旅。</p>
+          </div>
+          <div className="space-y-4">
+            <div>
+              <label className="block text-sm font-semibold mb-1">邮箱</label>
+              <input className="w-full h-12 px-4 rounded-lg border border-slate-300 focus:ring-2 focus:ring-primary outline-none" placeholder="例如：alex@example.com" />
+            </div>
+            <div>
+              <label className="block text-sm font-semibold mb-1">密码</label>
+              <div className="relative">
+                <input className="w-full h-12 px-4 rounded-lg border border-slate-300 focus:ring-2 focus:ring-primary outline-none" type="password" placeholder="••••••••" />
+                <button className="absolute right-3 top-3 text-slate-400"><Visibility size={20} /></button>
+              </div>
+            </div>
+            <div>
+              <label className="block text-sm font-semibold mb-1">确认密码</label>
+              <div className="relative">
+                <input className="w-full h-12 px-4 rounded-lg border border-slate-300 focus:ring-2 focus:ring-primary outline-none" type="password" placeholder="••••••••" />
+                <button className="absolute right-3 top-3 text-slate-400"><Visibility size={20} /></button>
+              </div>
+            </div>
+            <button onClick={onSignUp} className="w-full h-12 bg-primary text-white font-bold rounded-lg shadow-lg shadow-primary/20 flex items-center justify-center gap-2">
+              创建账号 <LoginIcon size={18} />
+            </button>
+          </div>
+        </div>
+        <div className="bg-slate-50 py-6 text-center border-t border-slate-200">
+          <p className="text-sm text-slate-500">已有账号？ <button onClick={onGoToLogin} className="text-primary font-bold">立即登录</button></p>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function OnboardingScreen({ onComplete, onSkip }: { onComplete: (profile: UserProfile) => void, onSkip: () => void }) {
+  const [profile, setProfile] = useState<UserProfile>({
+    name: '',
+    currentJob: '',
+    targetJob: '',
+    experience: 'Less than 1 year',
+    industry: ''
+  });
+
+  return (
+    <div className="flex flex-col h-full p-6 overflow-y-auto">
+      <div className="text-center mb-8">
+        <h1 className="text-2xl font-extrabold mb-2">个性化您的体验</h1>
+        <p className="text-slate-500 text-sm">告诉我们更多关于您的信息，以便 AI 提供更好的建议。</p>
+      </div>
+
+      <div className="space-y-6 bg-white p-6 rounded-2xl shadow-sm border border-slate-100">
+        <div>
+          <label className="block text-sm font-bold text-slate-700 mb-2">真实姓名</label>
+          <input 
+            className="w-full h-12 px-4 rounded-xl border border-slate-200 focus:ring-2 focus:ring-primary/20 outline-none" 
+            placeholder="例如：张三"
+            value={profile.name}
+            onChange={(e) => setProfile({...profile, name: e.target.value})}
+          />
+        </div>
+
+        <div>
+          <label className="block text-sm font-bold text-slate-700 mb-2">当前职位</label>
+          <input 
+            className="w-full h-12 px-4 rounded-xl border border-slate-200 focus:ring-2 focus:ring-primary/20 outline-none" 
+            placeholder="例如：前端开发工程师"
+            value={profile.currentJob}
+            onChange={(e) => setProfile({...profile, currentJob: e.target.value})}
+          />
+        </div>
+
+        <div>
+          <label className="block text-sm font-bold text-slate-700 mb-2">目标职位</label>
+          <input 
+            className="w-full h-12 px-4 rounded-xl border border-slate-200 focus:ring-2 focus:ring-primary/20 outline-none" 
+            placeholder="例如：产品经理"
+            value={profile.targetJob}
+            onChange={(e) => setProfile({...profile, targetJob: e.target.value})}
+          />
+        </div>
+
+        <div>
+          <label className="block text-sm font-bold text-slate-700 mb-2">工作经验</label>
+          <select 
+            className="w-full h-12 px-4 rounded-xl border border-slate-200 focus:ring-2 focus:ring-primary/20 outline-none bg-white"
+            value={profile.experience}
+            onChange={(e) => setProfile({...profile, experience: e.target.value})}
+          >
+            <option>Less than 1 year</option>
+            <option>1-3 years</option>
+            <option>3-5 years</option>
+            <option>5-10 years</option>
+            <option>10+ years</option>
+          </select>
+        </div>
+
+        <div>
+          <label className="block text-sm font-bold text-slate-700 mb-2">所属行业 (可选)</label>
+          <input 
+            className="w-full h-12 px-4 rounded-xl border border-slate-200 focus:ring-2 focus:ring-primary/20 outline-none" 
+            placeholder="例如：互联网、金融"
+            value={profile.industry}
+            onChange={(e) => setProfile({...profile, industry: e.target.value})}
+          />
+        </div>
+      </div>
+
+      <div className="mt-8 space-y-3">
+        <button 
+          onClick={() => onComplete(profile)}
+          className="w-full h-14 bg-primary text-white font-bold rounded-xl shadow-lg shadow-primary/20 active:scale-95 transition-transform"
+        >
+          保存并继续
+        </button>
+        <button 
+          onClick={onSkip}
+          className="w-full h-14 bg-slate-100 text-slate-500 font-bold rounded-xl active:scale-95 transition-transform"
+        >
+          暂时跳过
+        </button>
       </div>
     </div>
   );
@@ -322,25 +491,34 @@ function HomeScreen({ interviews, onStart, onViewResult, onLogout, onNavigate }:
       </header>
       
       <main className="flex-1 p-4 space-y-6 overflow-y-auto pb-24">
-        <section className="bg-white rounded-2xl shadow-sm border border-primary/10 p-6 text-center space-y-4">
-          <div className="flex justify-center gap-4">
-            <div className="w-16 h-20 bg-red-50 border border-red-100 rounded-lg flex flex-col items-center justify-center text-red-500">
+        <section className="relative overflow-hidden rounded-2xl shadow-sm border border-primary/10 p-6 text-center space-y-4 min-h-[240px] flex flex-col justify-center">
+          <div className="absolute inset-0 -z-10">
+            <img 
+              src="https://picsum.photos/seed/ai-tech-bg/800/600?blur=2" 
+              alt="Background" 
+              className="w-full h-full object-cover opacity-10"
+              referrerPolicy="no-referrer"
+            />
+            <div className="absolute inset-0 bg-gradient-to-b from-white/90 to-white"></div>
+          </div>
+          <div className="flex justify-center gap-4 relative z-10">
+            <div className="w-16 h-20 bg-red-50 border border-red-100 rounded-lg flex flex-col items-center justify-center text-red-500 shadow-sm">
               <Description size={32} />
               <span className="text-[10px] font-bold uppercase mt-1">PDF</span>
             </div>
-            <div className="w-16 h-20 bg-blue-50 border border-blue-100 rounded-lg flex flex-col items-center justify-center text-blue-500">
+            <div className="w-16 h-20 bg-blue-50 border border-blue-100 rounded-lg flex flex-col items-center justify-center text-blue-500 shadow-sm">
               <Description size={32} />
               <span className="text-[10px] font-bold uppercase mt-1">Word</span>
             </div>
           </div>
-          <div className="space-y-1">
-            <h2 className="text-xl font-bold">为您的职场飞跃做好准备</h2>
+          <div className="space-y-1 relative z-10">
+            <h2 className="text-xl font-bold tracking-tight">为您的职场飞跃做好准备</h2>
             <p className="text-slate-500 text-sm">我们的 AI 会分析您的简历，为您生成个性化的面试题目。</p>
           </div>
-          <button onClick={onStart} className="w-full bg-primary text-white font-bold py-4 rounded-xl shadow-lg shadow-primary/20 flex items-center justify-center gap-2 active:scale-95 transition-transform">
+          <button onClick={onStart} className="w-full bg-primary text-white font-bold py-4 rounded-xl shadow-lg shadow-primary/20 flex items-center justify-center gap-2 active:scale-95 transition-transform relative z-10">
             <UploadFile size={20} /> 上传简历
           </button>
-          <p className="text-xs text-slate-400 italic">支持 PDF, DOCX (最大 5MB)</p>
+          <p className="text-xs text-slate-400 italic relative z-10">支持 PDF, DOCX (最大 5MB)</p>
         </section>
 
         {/* New Feature Preview Section (Representing image3) */}
@@ -351,14 +529,14 @@ function HomeScreen({ interviews, onStart, onViewResult, onLogout, onNavigate }:
           <div className="bg-white rounded-2xl overflow-hidden border border-primary/10 shadow-sm group cursor-pointer">
             <div className="relative h-40 overflow-hidden">
               <img 
-                src="https://picsum.photos/seed/interview-preview/600/300" 
+                src="https://picsum.photos/seed/professional-interview/600/300" 
                 alt="AI Interview Preview" 
                 className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
                 referrerPolicy="no-referrer"
               />
-              <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent flex flex-col justify-end p-4">
+              <div className="absolute inset-0 bg-gradient-to-t from-primary/80 via-primary/20 to-transparent flex flex-col justify-end p-4">
                 <p className="text-white font-bold">沉浸式 AI 对话体验</p>
-                <p className="text-white/80 text-xs">实时语音与文字互动，还原真实面试场景</p>
+                <p className="text-white/90 text-xs">实时语音与文字互动，还原真实面试场景</p>
               </div>
             </div>
           </div>
