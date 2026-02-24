@@ -2,7 +2,7 @@
  * @license
  * SPDX-License-Identifier: Apache-2.0
  */
-
+import cloudbase from "@cloudbase/js-sdk";
 import React, { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { 
@@ -293,7 +293,35 @@ export default function App() {
 
 // --- Sub-Screens ---
 
-function LoginScreen({ onLogin, onGoToSignUp }: { onLogin: () => void, onGoToSignUp: () => void }) {
+function LoginScreen({ onLogin, onGoToSignUp }: { onLogin: () => void, onGoToSignUp: () => void }) {const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState('');
+
+  const appRef = useRef(null);
+  if (!appRef.current) {
+    appRef.current = cloudbase.init({
+      env: "facecounter-env-7g2jbdgb64fe92b4"
+    });
+  }
+  const auth = appRef.current.auth();
+
+  const handleLogin = async () => {
+    if (!email || !password) {
+      setError('请输入邮箱和密码');
+      return;
+    }
+    setIsLoading(true);
+    setError('');
+    try {
+      await auth.signInWithEmailAndPassword(email, password);
+      onLogin();
+    } catch (err) {
+      setError(err.message || '登录失败');
+    } finally {
+      setIsLoading(false);
+    }
+  };
   return (
     <div className="flex flex-col items-center justify-center p-6 h-full">
       <div className="w-full bg-white rounded-2xl shadow-xl border border-slate-200 overflow-hidden">
@@ -306,7 +334,12 @@ function LoginScreen({ onLogin, onGoToSignUp }: { onLogin: () => void, onGoToSig
           <div className="space-y-4">
             <div>
               <label className="block text-sm font-semibold mb-1">邮箱</label>
-              <input className="w-full h-12 px-4 rounded-lg border border-slate-300 focus:ring-2 focus:ring-primary outline-none" placeholder="例如：alex@example.com" />
+             <input 
+  className="w-full h-12 px-4 rounded-lg border border-slate-300 focus:ring-2 focus:ring-primary outline-none" 
+  placeholder="例如：alex@example.com"
+  value={email}
+  onChange={(e) => setEmail(e.target.value)}
+/>
             </div>
             <div>
               <div className="flex justify-between mb-1">
@@ -314,11 +347,24 @@ function LoginScreen({ onLogin, onGoToSignUp }: { onLogin: () => void, onGoToSig
                 <button className="text-sm font-semibold text-primary">忘记密码？</button>
               </div>
               <div className="relative">
-                <input className="w-full h-12 px-4 rounded-lg border border-slate-300 focus:ring-2 focus:ring-primary outline-none" type="password" placeholder="••••••••" />
+                <input 
+  className="w-full h-12 px-4 rounded-lg border border-slate-300 focus:ring-2 focus:ring-primary outline-none" 
+  type="password" 
+  placeholder="请输入密码"
+  value={password}
+  onChange={(e) => setPassword(e.target.value)}
+/>
                 <button className="absolute right-3 top-3 text-slate-400"><Visibility size={20} /></button>
               </div>
             </div>
-            <button onClick={onLogin} className="w-full h-12 bg-primary text-white font-bold rounded-lg shadow-lg shadow-primary/20 flex items-center justify-center gap-2">
+            <button 
+  onClick={handleLogin}
+  disabled={isLoading}
+  className="w-full h-12 bg-primary text-white font-bold rounded-lg shadow-lg shadow-primary/20 flex items-center justify-center gap-2"
+>
+  {isLoading ? '登录中...' : '登录'} 
+  <LoginIcon size={18} />
+</button>
               登录 <LoginIcon size={18} />
             </button>
           </div>
