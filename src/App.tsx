@@ -497,45 +497,6 @@ function SignUpScreen({ onSignUp, onGoToLogin }: { onSignUp: () => void, onGoToL
     </div>
   );
 }
-  return (
-    <div className="flex flex-col items-center justify-center p-6 h-full">
-      <div className="w-full bg-white rounded-2xl shadow-xl border border-slate-200 overflow-hidden">
-        <div className="p-8">
-          <div className="text-center mb-8">
-            <span className="text-primary font-bold tracking-tight text-sm uppercase">Facecounter</span>
-            <h1 className="text-3xl font-extrabold mt-4 mb-2">创建账号</h1>
-            <p className="text-slate-500">开启您的 AI 面试教练之旅。</p>
-          </div>
-          <div className="space-y-4">
-            <div>
-              <label className="block text-sm font-semibold mb-1">邮箱</label>
-              <input className="w-full h-12 px-4 rounded-lg border border-slate-300 focus:ring-2 focus:ring-primary outline-none" placeholder="例如：alex@example.com" />
-            </div>
-            <div>
-              <label className="block text-sm font-semibold mb-1">密码</label>
-              <div className="relative">
-                <input className="w-full h-12 px-4 rounded-lg border border-slate-300 focus:ring-2 focus:ring-primary outline-none" type="password" placeholder="••••••••" />
-                <button className="absolute right-3 top-3 text-slate-400"><Visibility size={20} /></button>
-              </div>
-            </div>
-            <div>
-              <label className="block text-sm font-semibold mb-1">确认密码</label>
-              <div className="relative">
-                <input className="w-full h-12 px-4 rounded-lg border border-slate-300 focus:ring-2 focus:ring-primary outline-none" type="password" placeholder="••••••••" />
-                <button className="absolute right-3 top-3 text-slate-400"><Visibility size={20} /></button>
-              </div>
-            </div>
-            <button onClick={onSignUp} className="w-full h-12 bg-primary text-white font-bold rounded-lg shadow-lg shadow-primary/20 flex items-center justify-center gap-2">
-              创建账号 <LoginIcon size={18} />
-            </button>
-          </div>
-        </div>
-        <div className="bg-slate-50 py-6 text-center border-t border-slate-200">
-          <p className="text-sm text-slate-500">已有账号？ <button onClick={onGoToLogin} className="text-primary font-bold">立即登录</button></p>
-        </div>
-      </div>
-    </div>
-  );
 
 function OnboardingScreen({ onComplete, onSkip }: { onComplete: (profile: UserProfile) => void, onSkip: () => void }) {
   const [profile, setProfile] = useState<UserProfile>({
