@@ -536,7 +536,6 @@ function SignUpScreen({ onSignUp, onGoToLogin }: { onSignUp: () => void, onGoToL
       </div>
     </div>
   );
-}
 
 function OnboardingScreen({ onComplete, onSkip }: { onComplete: (profile: UserProfile) => void, onSkip: () => void }) {
   const [profile, setProfile] = useState<UserProfile>({
