@@ -408,6 +408,95 @@ function LoginScreen({ onLogin, onGoToSignUp }: { onLogin: () => void, onGoToSig
 }
 
 function SignUpScreen({ onSignUp, onGoToLogin }: { onSignUp: () => void, onGoToLogin: () => void }) {
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState('');
+
+  const appRef = useRef(null);
+  if (!appRef.current) {
+    appRef.current = cloudbase.init({
+      env: "facecounter-env-7g2jbdgb64fe92b4"
+    });
+  }
+  const auth = appRef.current.auth();
+
+  const handleSignUp = async () => {
+    if (!email || !password) {
+      setError('请输入邮箱和密码');
+      return;
+    }
+    setIsLoading(true);
+    setError('');
+    try {
+      await auth.signUpWithEmailAndPassword(email, password);
+      alert('注册成功！请登录您的邮箱点击验证链接激活账号');
+      onGoToLogin();
+    } catch (err) {
+      setError(err.message || '注册失败');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  return (
+    <div className="flex flex-col items-center justify-center p-6 h-full">
+      <div className="w-full bg-white rounded-2xl shadow-xl border border-slate-200 overflow-hidden">
+        <div className="p-8">
+          <div className="text-center mb-8">
+            <span className="text-primary font-bold tracking-tight text-sm uppercase">Facecounter</span>
+            <h1 className="text-3xl font-extrabold mt-4 mb-2">创建账号</h1>
+            <p className="text-slate-500">开启您的 AI 面试教练之旅。</p>
+          </div>
+          
+          {error && (
+            <div className="text-red-500 text-sm text-center mb-4">{error}</div>
+          )}
+          
+          <div className="space-y-4">
+            <div>
+              <label className="block text-sm font-semibold mb-1">邮箱</label>
+              <input
+                className="w-full h-12 px-4 rounded-lg border border-slate-300 focus:ring-2 focus:ring-primary outline-none"
+                placeholder="例如：alex@example.com"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+              />
+            </div>
+            
+            <div>
+              <label className="block text-sm font-semibold mb-1">密码</label>
+              <div className="relative">
+                <input
+                  className="w-full h-12 px-4 rounded-lg border border-slate-300 focus:ring-2 focus:ring-primary outline-none"
+                  type="password"
+                  placeholder="至少6位密码"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                />
+              </div>
+            </div>
+            
+            <button
+              onClick={handleSignUp}
+              disabled={isLoading}
+              className="w-full h-12 bg-primary text-white font-bold rounded-lg shadow-lg shadow-primary/20 flex items-center justify-center gap-2"
+            >
+              {isLoading ? '注册中...' : '立即注册'}
+            </button>
+            
+            <p className="text-center text-sm text-slate-500 mt-4">
+              已有账号？{' '}
+              <button onClick={onGoToLogin} className="text-primary font-semibold hover:underline">
+                去登录
+              </button>
+            </p>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
   return (
     <div className="flex flex-col items-center justify-center p-6 h-full">
       <div className="w-full bg-white rounded-2xl shadow-xl border border-slate-200 overflow-hidden">
