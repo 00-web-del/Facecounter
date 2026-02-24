@@ -298,7 +298,7 @@ function LoginScreen({ onLogin, onGoToSignUp }: { onLogin: () => void, onGoToSig
     setIsSendingCode(true);
     setError('');
     try {
-      await auth.sendVerificationCode({
+      await auth.getVerification({
         email: email
       });
       setCountdown(60);
