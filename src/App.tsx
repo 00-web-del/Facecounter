@@ -279,62 +279,18 @@ export default function App() {
 
 function LoginScreen({ onLogin, onGoToSignUp }: { onLogin: () => void, onGoToSignUp: () => void }) {
   const [email, setEmail] = useState('');
-  const [verificationCode, setVerificationCode] = useState('');
   const [isLoading, setIsLoading] = useState(false);
-  const [isSendingCode, setIsSendingCode] = useState(false);
   const [error, setError] = useState('');
-  const [countdown, setCountdown] = useState(0);
-  const [verificationId, setVerificationId] = useState('');
 
-  const handleSendCode = async () => {
-    if (!email) {
-      setError('请输入邮箱');
-      return;
-    }
-    setIsSendingCode(true);
-    setError('');
-    try {
-      const verificationInfo = await auth.getVerification({
-        email: email
-      });
-      setVerificationId(verificationInfo.verification_id);
-      setCountdown(60);
-      const timer = setInterval(() => {
-        setCountdown((prev) => {
-          if (prev <= 1) {
-            clearInterval(timer);
-            return 0;
-          }
-          return prev - 1;
-        });
-      }, 1000);
-    } catch (err) {
-      setError(err.message || '验证码发送失败');
-    } finally {
-      setIsSendingCode(false);
-    }
-  };
-
-  const handleLoginWithCode = async () => {
-    if (!email || !verificationCode || !verificationId) {
-      setError('请输入邮箱和验证码');
-      return;
-    }
+  const handleLogin = async () => {
     setIsLoading(true);
     setError('');
     try {
-      const verificationTokenRes = await auth.verify({
-        verification_id: verificationId,
-        verification_code: verificationCode
-      });
-      
-      await auth.signIn({
-        username: email,
-        verification_token: verificationTokenRes.verification_token
-      });
+      // 直接匿名登录，不用验证码
+      await auth.signInAnonymously();
       onLogin();
     } catch (err) {
-      setError(err.message || '登录失败，请检查验证码');
+      setError('登录失败，请稍后重试');
     } finally {
       setIsLoading(false);
     }
@@ -347,7 +303,7 @@ function LoginScreen({ onLogin, onGoToSignUp }: { onLogin: () => void, onGoToSig
           <div className="text-center mb-8">
             <span className="text-primary font-bold tracking-tight text-sm uppercase">Facecounter</span>
             <h1 className="text-3xl font-extrabold mt-4 mb-2">欢迎回来</h1>
-            <p className="text-slate-500">输入邮箱获取验证码即可登录/注册</p>
+            <p className="text-slate-500">点击下方按钮即可快速体验</p>
           </div>
           
           {error && (
@@ -355,41 +311,12 @@ function LoginScreen({ onLogin, onGoToSignUp }: { onLogin: () => void, onGoToSig
           )}
           
           <div className="space-y-4">
-            <div>
-              <label className="block text-sm font-semibold mb-1">邮箱</label>
-              <input
-                className="w-full h-12 px-4 rounded-lg border border-slate-300 focus:ring-2 focus:ring-primary outline-none"
-                placeholder="例如：alex@example.com"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-              />
-            </div>
-            
-            <div>
-              <label className="block text-sm font-semibold mb-1">验证码</label>
-              <div className="flex gap-2">
-                <input
-                  className="flex-1 h-12 px-4 rounded-lg border border-slate-300 focus:ring-2 focus:ring-primary outline-none"
-                  placeholder="6位验证码"
-                  value={verificationCode}
-                  onChange={(e) => setVerificationCode(e.target.value)}
-                />
-                <button
-                  onClick={handleSendCode}
-                  disabled={isSendingCode || countdown > 0}
-                  className="w-28 h-12 bg-slate-100 text-slate-700 font-semibold rounded-lg hover:bg-slate-200 transition-colors disabled:opacity-50"
-                >
-                  {countdown > 0 ? `${countdown}秒` : (isSendingCode ? '发送中...' : '获取验证码')}
-                </button>
-              </div>
-            </div>
-            
             <button
-              onClick={handleLoginWithCode}
+              onClick={handleLogin}
               disabled={isLoading}
               className="w-full h-12 bg-primary text-white font-bold rounded-lg shadow-lg shadow-primary/20 flex items-center justify-center gap-2"
             >
-              {isLoading ? '登录中...' : '登录 / 注册'}
+              {isLoading ? '登录中...' : '快速体验'}
             </button>
             
             <p className="text-center text-sm text-slate-500 mt-4">
@@ -406,64 +333,18 @@ function LoginScreen({ onLogin, onGoToSignUp }: { onLogin: () => void, onGoToSig
 }
 
 function SignUpScreen({ onSignUp, onGoToLogin }: { onSignUp: () => void, onGoToLogin: () => void }) {
-  const [email, setEmail] = useState('');
-  const [verificationCode, setVerificationCode] = useState('');
   const [isLoading, setIsLoading] = useState(false);
-  const [isSendingCode, setIsSendingCode] = useState(false);
   const [error, setError] = useState('');
-  const [countdown, setCountdown] = useState(0);
-  const [verificationId, setVerificationId] = useState('');
 
-  const handleSendCode = async () => {
-    if (!email) {
-      setError('请输入邮箱');
-      return;
-    }
-    setIsSendingCode(true);
-    setError('');
-    try {
-      const verificationInfo = await auth.getVerification({
-        email: email
-      });
-      setVerificationId(verificationInfo.verification_id);
-      setCountdown(60);
-      const timer = setInterval(() => {
-        setCountdown((prev) => {
-          if (prev <= 1) {
-            clearInterval(timer);
-            return 0;
-          }
-          return prev - 1;
-        });
-      }, 1000);
-    } catch (err) {
-      setError(err.message || '验证码发送失败');
-    } finally {
-      setIsSendingCode(false);
-    }
-  };
-
-  const handleSignUpWithCode = async () => {
-    if (!email || !verificationCode || !verificationId) {
-      setError('请输入邮箱和验证码');
-      return;
-    }
+  const handleSignUp = async () => {
     setIsLoading(true);
     setError('');
     try {
-      const verificationTokenRes = await auth.verify({
-        verification_id: verificationId,
-        verification_code: verificationCode
-      });
-      
-      await auth.signIn({
-        username: email,
-        verification_token: verificationTokenRes.verification_token
-      });
-      alert('注册成功！请登录您的邮箱点击验证链接激活账号');
-      onGoToLogin();
+      // 直接匿名登录，不用验证码
+      await auth.signInAnonymously();
+      onSignUp();
     } catch (err) {
-      setError(err.message || '注册失败');
+      setError('注册失败，请稍后重试');
     } finally {
       setIsLoading(false);
     }
@@ -476,7 +357,7 @@ function SignUpScreen({ onSignUp, onGoToLogin }: { onSignUp: () => void, onGoToL
           <div className="text-center mb-8">
             <span className="text-primary font-bold tracking-tight text-sm uppercase">Facecounter</span>
             <h1 className="text-3xl font-extrabold mt-4 mb-2">创建账号</h1>
-            <p className="text-slate-500">输入邮箱获取验证码即可注册</p>
+            <p className="text-slate-500">点击下方按钮即可快速体验</p>
           </div>
           
           {error && (
@@ -484,41 +365,12 @@ function SignUpScreen({ onSignUp, onGoToLogin }: { onSignUp: () => void, onGoToL
           )}
           
           <div className="space-y-4">
-            <div>
-              <label className="block text-sm font-semibold mb-1">邮箱</label>
-              <input
-                className="w-full h-12 px-4 rounded-lg border border-slate-300 focus:ring-2 focus:ring-primary outline-none"
-                placeholder="例如：alex@example.com"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-              />
-            </div>
-            
-            <div>
-              <label className="block text-sm font-semibold mb-1">验证码</label>
-              <div className="flex gap-2">
-                <input
-                  className="flex-1 h-12 px-4 rounded-lg border border-slate-300 focus:ring-2 focus:ring-primary outline-none"
-                  placeholder="6位验证码"
-                  value={verificationCode}
-                  onChange={(e) => setVerificationCode(e.target.value)}
-                />
-                <button
-                  onClick={handleSendCode}
-                  disabled={isSendingCode || countdown > 0}
-                  className="w-28 h-12 bg-slate-100 text-slate-700 font-semibold rounded-lg hover:bg-slate-200 transition-colors disabled:opacity-50"
-                >
-                  {countdown > 0 ? `${countdown}秒` : (isSendingCode ? '发送中...' : '获取验证码')}
-                </button>
-              </div>
-            </div>
-            
             <button
-              onClick={handleSignUpWithCode}
+              onClick={handleSignUp}
               disabled={isLoading}
               className="w-full h-12 bg-primary text-white font-bold rounded-lg shadow-lg shadow-primary/20 flex items-center justify-center gap-2"
             >
-              {isLoading ? '注册中...' : '立即注册'}
+              {isLoading ? '注册中...' : '快速体验'}
             </button>
             
             <p className="text-center text-sm text-slate-500 mt-4">
