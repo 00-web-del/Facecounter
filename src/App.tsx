@@ -46,6 +46,12 @@ import {
   ResponsiveContainer
 } from 'recharts';
 
+// 全局只初始化一次云开发
+const cloudbaseApp = cloudbase.init({
+  env: "facecounter-env-7g2jbdgb64fe92b4"
+});
+const auth = cloudbaseApp.auth();
+
 // Mock data
 const MOCK_INTERVIEWS: Interview[] = [
   {
@@ -83,7 +89,6 @@ const MOCK_INTERVIEWS: Interview[] = [
   }
 ];
 
-// 保存用户信息到 localStorage
 const saveProfile = (profile: UserProfile) => {
   localStorage.setItem('user_profile', JSON.stringify(profile));
 };
@@ -178,7 +183,6 @@ export default function App() {
   };
 
   const getAiResponse = async (messages: Message[], systemInstruction: string): Promise<string> => {
-    // 模拟AI响应
     await new Promise(resolve => setTimeout(resolve, 1000));
     
     if (messages.length <= 1) {
@@ -263,7 +267,6 @@ export default function App() {
         </motion.div>
       </AnimatePresence>
 
-      {/* Background Decorations */}
       <div className="fixed top-0 left-0 w-full h-full -z-0 overflow-hidden pointer-events-none">
         <div className="absolute -top-24 -right-24 w-96 h-96 bg-primary/5 rounded-full blur-3xl"></div>
         <div className="absolute top-1/2 -left-24 w-64 h-64 bg-primary/5 rounded-full blur-3xl"></div>
@@ -281,14 +284,7 @@ function LoginScreen({ onLogin, onGoToSignUp }: { onLogin: () => void, onGoToSig
   const [isSendingCode, setIsSendingCode] = useState(false);
   const [error, setError] = useState('');
   const [countdown, setCountdown] = useState(0);
-
-  const appRef = useRef(null);
-  if (!appRef.current) {
-    appRef.current = cloudbase.init({
-      env: "facecounter-env-7g2jbdgb64fe92b4"
-    });
-  }
-  const auth = appRef.current.auth();
+  const [verificationInfo, setVerificationInfo] = useState(null);
 
   const handleSendCode = async () => {
     if (!email) {
@@ -298,9 +294,10 @@ function LoginScreen({ onLogin, onGoToSignUp }: { onLogin: () => void, onGoToSig
     setIsSendingCode(true);
     setError('');
     try {
-      await auth.getVerification({
+      const info = await auth.getVerification({
         email: email
       });
+      setVerificationInfo(info);
       setCountdown(60);
       const timer = setInterval(() => {
         setCountdown((prev) => {
@@ -410,14 +407,7 @@ function SignUpScreen({ onSignUp, onGoToLogin }: { onSignUp: () => void, onGoToL
   const [isSendingCode, setIsSendingCode] = useState(false);
   const [error, setError] = useState('');
   const [countdown, setCountdown] = useState(0);
-
-  const appRef = useRef(null);
-  if (!appRef.current) {
-    appRef.current = cloudbase.init({
-      env: "facecounter-env-7g2jbdgb64fe92b4"
-    });
-  }
-  const auth = appRef.current.auth();
+  const [verificationInfo, setVerificationInfo] = useState(null);
 
   const handleSendCode = async () => {
     if (!email) {
@@ -427,9 +417,10 @@ function SignUpScreen({ onSignUp, onGoToLogin }: { onSignUp: () => void, onGoToL
     setIsSendingCode(true);
     setError('');
     try {
-      await auth.getVerification({
+      const info = await auth.getVerification({
         email: email
       });
+      setVerificationInfo(info);
       setCountdown(60);
       const timer = setInterval(() => {
         setCountdown((prev) => {
@@ -646,7 +637,6 @@ function HomeScreen({
 
   return (
     <div className="flex flex-col h-full">
-      {/* Header */}
       <div className="bg-white border-b border-slate-200 px-6 py-4">
         <div className="flex items-center justify-between">
           <div>
@@ -662,9 +652,7 @@ function HomeScreen({
         </div>
       </div>
 
-      {/* Content */}
       <div className="flex-1 overflow-y-auto p-6">
-        {/* Upload Card */}
         <div className="bg-primary/5 rounded-2xl p-6 mb-6 border-2 border-dashed border-primary/30">
           <div className="flex items-center gap-4 mb-4">
             <div className="w-12 h-12 bg-primary/10 rounded-xl flex items-center justify-center">
@@ -683,7 +671,6 @@ function HomeScreen({
           </button>
         </div>
 
-        {/* Stats Cards */}
         <div className="grid grid-cols-2 gap-4 mb-6">
           <div className="bg-white rounded-xl p-4 shadow-sm border border-slate-100">
             <div className="text-2xl font-bold text-primary mb-1">{completedInterviews.length}</div>
@@ -695,7 +682,6 @@ function HomeScreen({
           </div>
         </div>
 
-        {/* Quick Actions */}
         <div className="grid grid-cols-4 gap-2 mb-6">
           <button 
             onClick={() => onNavigate(Screen.ANALYSIS)}
@@ -724,7 +710,6 @@ function HomeScreen({
           </button>
         </div>
 
-        {/* Past Interviews */}
         <div>
           <div className="flex items-center justify-between mb-3">
             <h3 className="font-bold">往期面试</h3>
