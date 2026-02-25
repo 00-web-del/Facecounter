@@ -46,6 +46,11 @@ import {
   Tooltip, 
   ResponsiveContainer 
 } from 'recharts';
+import * as pdfjs from 'pdfjs-dist';
+import mammoth from 'mammoth';
+
+// Set worker source for pdfjs
+pdfjs.GlobalWorkerOptions.workerSrc = `//cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjs.version}/pdf.worker.min.js`;
 
 const STATS_DATA = [
   { name: '1月', score: 65 },
@@ -90,25 +95,71 @@ export default function App() {
   const [isTyping, setIsTyping] = useState(false);
   const [inputText, setInputText] = useState('');
   const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
+  const [user, setUser] = useState<{ id: number, email: string } | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
   const chatEndRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    const savedProfile = localStorage.getItem('user_profile');
-    if (savedProfile) {
-      setUserProfile(JSON.parse(savedProfile));
-    }
+    checkAuth();
+
+    const handleMessage = (event: MessageEvent) => {
+      const origin = event.origin;
+      if (!origin.endsWith('.run.app') && !origin.includes('localhost')) {
+        return;
+      }
+      if (event.data?.type === 'OAUTH_AUTH_SUCCESS') {
+        checkAuth();
+      }
+    };
+    window.addEventListener('message', handleMessage);
+    return () => window.removeEventListener('message', handleMessage);
   }, []);
 
-  const saveProfile = (profile: UserProfile) => {
+  const checkAuth = async () => {
+    try {
+      const res = await fetch('/api/auth/me');
+      if (res.ok) {
+        const data = await res.json();
+        setUser(data.user);
+        setUserProfile(data.profile);
+        setCurrentScreen(Screen.HOME);
+      }
+    } catch (error) {
+      console.error('Auth check failed:', error);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const saveProfile = async (profile: UserProfile) => {
     setUserProfile(profile);
-    localStorage.setItem('user_profile', JSON.stringify(profile));
+    try {
+      await fetch('/api/user/profile', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ profile })
+      });
+    } catch (error) {
+      console.error('Failed to save profile:', error);
+    }
+  };
+
+  const handleLogout = async () => {
+    try {
+      await fetch('/api/auth/logout', { method: 'POST' });
+      setUser(null);
+      setUserProfile(null);
+      setCurrentScreen(Screen.LOGIN);
+    } catch (error) {
+      console.error('Logout failed:', error);
+    }
   };
 
   useEffect(() => {
     chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [activeInterview?.messages, isTyping]);
 
-  const startNewInterview = (role: string = '软件工程师') => {
+  const startNewInterview = (role: string = '软件工程师', resumeText?: string) => {
     const welcomeMsg = userProfile?.name 
       ? `你好，${userProfile.name}！我是你的 AI 教练。今天我们将重点关注 ${role} 的面试。首先，你能告诉我一次你带领团队度过重大挑战的经历吗？`
       : `你好！我是你的 AI 教练。今天我们将重点关注 ${role} 的面试。首先，你能告诉我一次你带领团队度过重大挑战的经历吗？`;
@@ -117,6 +168,7 @@ export default function App() {
       id: Date.now().toString(),
       role: role,
       status: 'DRAFT',
+      resumeText: resumeText,
       messages: [
         {
           id: '1',
@@ -148,6 +200,10 @@ export default function App() {
     try {
       let systemPrompt = `你是一个专业的AI面试教练，名叫Facecounter。你的目标是帮助用户练习面试。请保持专业、鼓励且具有挑战性。目前的面试职位是：${activeInterview.role}。`;
       
+      if (activeInterview.resumeText) {
+        systemPrompt += `\n\n用户上传的简历内容如下：\n${activeInterview.resumeText}\n\n请结合简历内容进行提问。`;
+      }
+
       if (userProfile) {
         systemPrompt += `\n用户信息：
         - 姓名：${userProfile.name || '未提供'}
@@ -211,9 +267,22 @@ export default function App() {
   const renderScreen = () => {
     switch (currentScreen) {
       case Screen.LOGIN:
-        return <LoginScreen onLogin={() => setCurrentScreen(Screen.HOME)} onGoToSignUp={() => setCurrentScreen(Screen.SIGNUP)} />;
+        return <LoginScreen 
+          onLogin={(userData, profileData) => {
+            setUser(userData);
+            setUserProfile(profileData);
+            setCurrentScreen(Screen.HOME);
+          }} 
+          onGoToSignUp={() => setCurrentScreen(Screen.SIGNUP)} 
+        />;
       case Screen.SIGNUP:
-        return <SignUpScreen onSignUp={() => setCurrentScreen(Screen.ONBOARDING)} onGoToLogin={() => setCurrentScreen(Screen.LOGIN)} />;
+        return <SignUpScreen 
+          onSignUp={(userData) => {
+            setUser(userData);
+            setCurrentScreen(Screen.ONBOARDING);
+          }} 
+          onGoToLogin={() => setCurrentScreen(Screen.LOGIN)} 
+        />;
       case Screen.ONBOARDING:
         return <OnboardingScreen onComplete={(profile) => {
           saveProfile(profile);
@@ -222,8 +291,15 @@ export default function App() {
       case Screen.HOME:
         return <HomeScreen 
           interviews={interviews} 
-          onStart={() => setCurrentScreen(Screen.SETUP)} 
-          onLogout={() => setCurrentScreen(Screen.LOGIN)}
+          onStart={(resumeText) => {
+            if (resumeText) {
+              // If resume uploaded, we might want to ask for role or just use a default
+              startNewInterview('简历匹配职位', resumeText);
+            } else {
+              setCurrentScreen(Screen.SETUP);
+            }
+          }} 
+          onLogout={handleLogout}
           onNavigate={(s) => setCurrentScreen(s)}
           onViewResult={(id) => {
             const interview = interviews.find(i => i.id === id);
@@ -255,17 +331,31 @@ export default function App() {
       case Screen.QUESTION_BANK:
         return <QuestionBankScreen onBack={() => setCurrentScreen(Screen.HOME)} onNavigate={(s) => setCurrentScreen(s)} />;
       case Screen.SETTINGS:
-        return <SettingsScreen onBack={() => setCurrentScreen(Screen.HOME)} onLogout={() => setCurrentScreen(Screen.LOGIN)} onNavigate={(s) => setCurrentScreen(s)} />;
+        return <SettingsScreen onBack={() => setCurrentScreen(Screen.HOME)} onLogout={handleLogout} onNavigate={(s) => setCurrentScreen(s)} />;
       default:
         return <HomeScreen 
           interviews={interviews} 
-          onStart={() => setCurrentScreen(Screen.SETUP)} 
-          onLogout={() => setCurrentScreen(Screen.LOGIN)}
+          onStart={(resumeText) => {
+            if (resumeText) {
+              startNewInterview('简历匹配职位', resumeText);
+            } else {
+              setCurrentScreen(Screen.SETUP);
+            }
+          }} 
+          onLogout={handleLogout}
           onNavigate={(s) => setCurrentScreen(s)}
           onViewResult={() => {}} 
         />;
     }
   };
+
+  if (isLoading) {
+    return (
+      <div className="max-w-md mx-auto min-h-screen bg-white flex items-center justify-center">
+        <div className="w-10 h-10 border-4 border-primary border-t-transparent rounded-full animate-spin"></div>
+      </div>
+    );
+  }
 
   return (
     <div className="max-w-md mx-auto min-h-screen bg-background-light flex flex-col relative overflow-hidden">
@@ -293,7 +383,57 @@ export default function App() {
 
 // --- Sub-Screens ---
 
-function LoginScreen({ onLogin, onGoToSignUp }: { onLogin: () => void, onGoToSignUp: () => void }) {
+function LoginScreen({ onLogin, onGoToSignUp }: { onLogin: (user: any, profile: any) => void, onGoToSignUp: () => void }) {
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [error, setError] = useState('');
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
+  const handleSubmit = async () => {
+    if (!email || !password) return;
+    setIsSubmitting(true);
+    setError('');
+    try {
+      const res = await fetch('/api/auth/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, password })
+      });
+      const data = await res.json();
+      if (res.ok) {
+        onLogin(data.user, data.profile);
+      } else {
+        setError(data.error || '登录失败');
+      }
+    } catch (err) {
+      setError('网络错误，请重试');
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const handleGoogleLogin = async () => {
+    try {
+      const res = await fetch('/api/auth/google/url');
+      if (!res.ok) throw new Error('Failed to get Google Auth URL');
+      const { url } = await res.json();
+      
+      const width = 500;
+      const height = 600;
+      const left = window.screenX + (window.outerWidth - width) / 2;
+      const top = window.screenY + (window.outerHeight - height) / 2;
+      
+      window.open(
+        url,
+        'google_oauth',
+        `width=${width},height=${height},left=${left},top=${top}`
+      );
+    } catch (err) {
+      console.error('Google login failed:', err);
+      alert('无法启动 Google 登录，请重试');
+    }
+  };
+
   return (
     <div className="flex flex-col items-center justify-center p-6 h-full">
       <div className="w-full bg-white rounded-2xl shadow-xl border border-slate-200 overflow-hidden">
@@ -303,10 +443,16 @@ function LoginScreen({ onLogin, onGoToSignUp }: { onLogin: () => void, onGoToSig
             <h1 className="text-3xl font-extrabold mt-4 mb-2">欢迎回来</h1>
             <p className="text-slate-500">登录以继续您的面试练习并决胜下一场面试。</p>
           </div>
+          {error && <div className="mb-4 p-3 bg-red-50 text-red-600 text-sm rounded-lg font-medium">{error}</div>}
           <div className="space-y-4">
             <div>
               <label className="block text-sm font-semibold mb-1">邮箱</label>
-              <input className="w-full h-12 px-4 rounded-lg border border-slate-300 focus:ring-2 focus:ring-primary outline-none" placeholder="例如：alex@example.com" />
+              <input 
+                className="w-full h-12 px-4 rounded-lg border border-slate-300 focus:ring-2 focus:ring-primary outline-none" 
+                placeholder="例如：alex@example.com" 
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+              />
             </div>
             <div>
               <div className="flex justify-between mb-1">
@@ -314,19 +460,29 @@ function LoginScreen({ onLogin, onGoToSignUp }: { onLogin: () => void, onGoToSig
                 <button className="text-sm font-semibold text-primary">忘记密码？</button>
               </div>
               <div className="relative">
-                <input className="w-full h-12 px-4 rounded-lg border border-slate-300 focus:ring-2 focus:ring-primary outline-none" type="password" placeholder="••••••••" />
+                <input 
+                  className="w-full h-12 px-4 rounded-lg border border-slate-300 focus:ring-2 focus:ring-primary outline-none" 
+                  type="password" 
+                  placeholder="••••••••" 
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                />
                 <button className="absolute right-3 top-3 text-slate-400"><Visibility size={20} /></button>
               </div>
             </div>
-            <button onClick={onLogin} className="w-full h-12 bg-primary text-white font-bold rounded-lg shadow-lg shadow-primary/20 flex items-center justify-center gap-2">
-              登录 <LoginIcon size={18} />
+            <button 
+              onClick={handleSubmit} 
+              disabled={isSubmitting}
+              className="w-full h-12 bg-primary text-white font-bold rounded-lg shadow-lg shadow-primary/20 flex items-center justify-center gap-2 disabled:opacity-50"
+            >
+              {isSubmitting ? '登录中...' : <><LoginIcon size={18} /> 登录</>}
             </button>
           </div>
           <div className="relative my-8 text-center">
             <div className="absolute inset-0 flex items-center"><div className="w-full border-t border-slate-200"></div></div>
             <span className="relative bg-white px-2 text-xs text-slate-400 uppercase">或通过以下方式继续</span>
           </div>
-          <button onClick={onLogin} className="w-full h-12 border border-slate-300 rounded-lg flex items-center justify-center gap-3 font-medium">
+          <button onClick={handleGoogleLogin} className="w-full h-12 border border-slate-300 rounded-lg flex items-center justify-center gap-3 font-medium hover:bg-slate-50 transition-colors">
             <svg className="h-5 w-5" viewBox="0 0 24 24">
               <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4"></path>
               <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"></path>
@@ -344,7 +500,40 @@ function LoginScreen({ onLogin, onGoToSignUp }: { onLogin: () => void, onGoToSig
   );
 }
 
-function SignUpScreen({ onSignUp, onGoToLogin }: { onSignUp: () => void, onGoToLogin: () => void }) {
+function SignUpScreen({ onSignUp, onGoToLogin }: { onSignUp: (user: any) => void, onGoToLogin: () => void }) {
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [error, setError] = useState('');
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
+  const handleSubmit = async () => {
+    if (!email || !password) return;
+    if (password !== confirmPassword) {
+      setError('两次输入的密码不一致');
+      return;
+    }
+    setIsSubmitting(true);
+    setError('');
+    try {
+      const res = await fetch('/api/auth/signup', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, password })
+      });
+      const data = await res.json();
+      if (res.ok) {
+        onSignUp(data.user);
+      } else {
+        setError(data.error || '注册失败');
+      }
+    } catch (err) {
+      setError('网络错误，请重试');
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
   return (
     <div className="flex flex-col items-center justify-center p-6 h-full">
       <div className="w-full bg-white rounded-2xl shadow-xl border border-slate-200 overflow-hidden">
@@ -354,27 +543,49 @@ function SignUpScreen({ onSignUp, onGoToLogin }: { onSignUp: () => void, onGoToL
             <h1 className="text-3xl font-extrabold mt-4 mb-2">创建账号</h1>
             <p className="text-slate-500">开启您的 AI 面试教练之旅。</p>
           </div>
+          {error && <div className="mb-4 p-3 bg-red-50 text-red-600 text-sm rounded-lg font-medium">{error}</div>}
           <div className="space-y-4">
             <div>
               <label className="block text-sm font-semibold mb-1">邮箱</label>
-              <input className="w-full h-12 px-4 rounded-lg border border-slate-300 focus:ring-2 focus:ring-primary outline-none" placeholder="例如：alex@example.com" />
+              <input 
+                className="w-full h-12 px-4 rounded-lg border border-slate-300 focus:ring-2 focus:ring-primary outline-none" 
+                placeholder="例如：alex@example.com" 
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+              />
             </div>
             <div>
               <label className="block text-sm font-semibold mb-1">密码</label>
               <div className="relative">
-                <input className="w-full h-12 px-4 rounded-lg border border-slate-300 focus:ring-2 focus:ring-primary outline-none" type="password" placeholder="••••••••" />
+                <input 
+                  className="w-full h-12 px-4 rounded-lg border border-slate-300 focus:ring-2 focus:ring-primary outline-none" 
+                  type="password" 
+                  placeholder="••••••••" 
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                />
                 <button className="absolute right-3 top-3 text-slate-400"><Visibility size={20} /></button>
               </div>
             </div>
             <div>
               <label className="block text-sm font-semibold mb-1">确认密码</label>
               <div className="relative">
-                <input className="w-full h-12 px-4 rounded-lg border border-slate-300 focus:ring-2 focus:ring-primary outline-none" type="password" placeholder="••••••••" />
+                <input 
+                  className="w-full h-12 px-4 rounded-lg border border-slate-300 focus:ring-2 focus:ring-primary outline-none" 
+                  type="password" 
+                  placeholder="••••••••" 
+                  value={confirmPassword}
+                  onChange={(e) => setConfirmPassword(e.target.value)}
+                />
                 <button className="absolute right-3 top-3 text-slate-400"><Visibility size={20} /></button>
               </div>
             </div>
-            <button onClick={onSignUp} className="w-full h-12 bg-primary text-white font-bold rounded-lg shadow-lg shadow-primary/20 flex items-center justify-center gap-2">
-              创建账号 <LoginIcon size={18} />
+            <button 
+              onClick={handleSubmit} 
+              disabled={isSubmitting}
+              className="w-full h-12 bg-primary text-white font-bold rounded-lg shadow-lg shadow-primary/20 flex items-center justify-center gap-2 disabled:opacity-50"
+            >
+              {isSubmitting ? '注册中...' : <><LoginIcon size={18} /> 创建账号</>}
             </button>
           </div>
         </div>
@@ -477,7 +688,51 @@ function OnboardingScreen({ onComplete, onSkip }: { onComplete: (profile: UserPr
   );
 }
 
-function HomeScreen({ interviews, onStart, onViewResult, onLogout, onNavigate }: { interviews: Interview[], onStart: () => void, onViewResult: (id: string) => void, onLogout: () => void, onNavigate: (s: Screen) => void }) {
+function HomeScreen({ interviews, onStart, onViewResult, onLogout, onNavigate }: { interviews: Interview[], onStart: (resumeText?: string) => void, onViewResult: (id: string) => void, onLogout: () => void, onNavigate: (s: Screen) => void }) {
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [isUploading, setIsUploading] = useState(false);
+
+  const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    setIsUploading(true);
+    try {
+      let text = '';
+      if (file.type === 'application/pdf') {
+        const arrayBuffer = await file.arrayBuffer();
+        const pdf = await pdfjs.getDocument({ data: arrayBuffer }).promise;
+        let fullText = '';
+        for (let i = 1; i <= pdf.numPages; i++) {
+          const page = await pdf.getPage(i);
+          const content = await page.getTextContent();
+          const strings = content.items.map((item: any) => item.str);
+          fullText += strings.join(' ') + '\n';
+        }
+        text = fullText;
+      } else if (file.type === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document') {
+        const arrayBuffer = await file.arrayBuffer();
+        const result = await mammoth.extractRawText({ arrayBuffer });
+        text = result.value;
+      } else {
+        alert('目前仅支持 PDF 和 DOCX 格式');
+        return;
+      }
+
+      if (text.trim()) {
+        onStart(text);
+      } else {
+        alert('无法从文件中提取文字，请确保文件内容可读。');
+      }
+    } catch (error) {
+      console.error('File upload error:', error);
+      alert('解析文件时出错，请重试。');
+    } finally {
+      setIsUploading(false);
+      if (fileInputRef.current) fileInputRef.current.value = '';
+    }
+  };
+
   return (
     <div className="flex flex-col h-full">
       <header className="bg-white/80 backdrop-blur-md border-b border-primary/10 px-4 h-16 flex items-center justify-between sticky top-0 z-10">
@@ -515,8 +770,28 @@ function HomeScreen({ interviews, onStart, onViewResult, onLogout, onNavigate }:
             <h2 className="text-xl font-bold tracking-tight">为您的职场飞跃做好准备</h2>
             <p className="text-slate-500 text-sm">我们的 AI 会分析您的简历，为您生成个性化的面试题目。</p>
           </div>
-          <button onClick={onStart} className="w-full bg-primary text-white font-bold py-4 rounded-xl shadow-lg shadow-primary/20 flex items-center justify-center gap-2 active:scale-95 transition-transform relative z-10">
-            <UploadFile size={20} /> 上传简历
+          
+          <input 
+            type="file" 
+            ref={fileInputRef} 
+            onChange={handleFileUpload} 
+            accept=".pdf,.docx" 
+            className="hidden" 
+          />
+
+          <button 
+            onClick={() => fileInputRef.current?.click()} 
+            disabled={isUploading}
+            className="w-full bg-primary text-white font-bold py-4 rounded-xl shadow-lg shadow-primary/20 flex items-center justify-center gap-2 active:scale-95 transition-transform relative z-10 disabled:opacity-50"
+          >
+            {isUploading ? (
+              <div className="flex items-center gap-2">
+                <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                解析中...
+              </div>
+            ) : (
+              <><UploadFile size={20} /> 上传简历</>
+            )}
           </button>
           <p className="text-xs text-slate-400 italic relative z-10">支持 PDF, DOCX (最大 5MB)</p>
         </section>

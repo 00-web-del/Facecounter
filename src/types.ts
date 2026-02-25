@@ -38,6 +38,7 @@ export interface Interview {
   strengths?: string[];
   improvements?: string[];
   messages?: Message[];
+  resumeText?: string;
 }
 
 export const INTERVIEW_SCHEMA = {
