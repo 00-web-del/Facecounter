@@ -94,7 +94,8 @@ const saveProfile = (profile: UserProfile) => {
 };
 
 export default function App() {
-  const [currentScreen, setCurrentScreen] = useState<Screen>(Screen.LOGIN);
+  // 直接进入首页，跳过登录
+  const [currentScreen, setCurrentScreen] = useState<Screen>(Screen.HOME);
   const [interviews, setInterviews] = useState<Interview[]>(MOCK_INTERVIEWS);
   const [activeInterview, setActiveInterview] = useState<Interview | null>(null);
   const [isTyping, setIsTyping] = useState(false);
@@ -248,7 +249,19 @@ export default function App() {
       case Screen.SETTINGS:
         return <SettingsScreen onBack={() => setCurrentScreen(Screen.HOME)} userProfile={userProfile} />;
       default:
-        return <LoginScreen onLogin={() => setCurrentScreen(Screen.HOME)} onGoToSignUp={() => setCurrentScreen(Screen.SIGNUP)} />;
+        return <HomeScreen
+          interviews={interviews}
+          onStart={() => setCurrentScreen(Screen.SETUP)}
+          onLogout={() => setCurrentScreen(Screen.LOGIN)}
+          onNavigate={(s) => setCurrentScreen(s)}
+          onViewResult={(id) => {
+            const interview = interviews.find(i => i.id === id);
+            if (interview && interview.status === 'COMPLETED') {
+              setActiveInterview(interview);
+              setCurrentScreen(Screen.RESULT);
+            }
+          }}
+        />;
     }
   };
 
@@ -286,7 +299,6 @@ function LoginScreen({ onLogin, onGoToSignUp }: { onLogin: () => void, onGoToSig
     setIsLoading(true);
     setError('');
     try {
-      // 直接匿名登录，不用验证码
       await auth.signInAnonymously();
       onLogin();
     } catch (err) {
@@ -340,7 +352,6 @@ function SignUpScreen({ onSignUp, onGoToLogin }: { onSignUp: () => void, onGoToL
     setIsLoading(true);
     setError('');
     try {
-      // 直接匿名登录，不用验证码
       await auth.signInAnonymously();
       onSignUp();
     } catch (err) {
