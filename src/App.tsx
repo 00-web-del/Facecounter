@@ -284,7 +284,7 @@ function LoginScreen({ onLogin, onGoToSignUp }: { onLogin: () => void, onGoToSig
   const [isSendingCode, setIsSendingCode] = useState(false);
   const [error, setError] = useState('');
   const [countdown, setCountdown] = useState(0);
-  const [verificationInfo, setVerificationInfo] = useState(null);
+  const [verificationId, setVerificationId] = useState('');
 
   const handleSendCode = async () => {
     if (!email) {
@@ -294,10 +294,10 @@ function LoginScreen({ onLogin, onGoToSignUp }: { onLogin: () => void, onGoToSig
     setIsSendingCode(true);
     setError('');
     try {
-      const info = await auth.getVerification({
+      const verificationInfo = await auth.getVerification({
         email: email
       });
-      setVerificationInfo(info);
+      setVerificationId(verificationInfo.verification_id);
       setCountdown(60);
       const timer = setInterval(() => {
         setCountdown((prev) => {
@@ -316,16 +316,21 @@ function LoginScreen({ onLogin, onGoToSignUp }: { onLogin: () => void, onGoToSig
   };
 
   const handleLoginWithCode = async () => {
-    if (!email || !verificationCode) {
+    if (!email || !verificationCode || !verificationId) {
       setError('请输入邮箱和验证码');
       return;
     }
     setIsLoading(true);
     setError('');
     try {
-      await auth.signInWithEmail({
-        email: email,
-        verificationCode: verificationCode
+      const verificationTokenRes = await auth.verify({
+        verification_id: verificationId,
+        verification_code: verificationCode
+      });
+      
+      await auth.signIn({
+        username: email,
+        verification_token: verificationTokenRes.verification_token
       });
       onLogin();
     } catch (err) {
@@ -407,7 +412,7 @@ function SignUpScreen({ onSignUp, onGoToLogin }: { onSignUp: () => void, onGoToL
   const [isSendingCode, setIsSendingCode] = useState(false);
   const [error, setError] = useState('');
   const [countdown, setCountdown] = useState(0);
-  const [verificationInfo, setVerificationInfo] = useState(null);
+  const [verificationId, setVerificationId] = useState('');
 
   const handleSendCode = async () => {
     if (!email) {
@@ -417,10 +422,10 @@ function SignUpScreen({ onSignUp, onGoToLogin }: { onSignUp: () => void, onGoToL
     setIsSendingCode(true);
     setError('');
     try {
-      const info = await auth.getVerification({
+      const verificationInfo = await auth.getVerification({
         email: email
       });
-      setVerificationInfo(info);
+      setVerificationId(verificationInfo.verification_id);
       setCountdown(60);
       const timer = setInterval(() => {
         setCountdown((prev) => {
@@ -439,16 +444,21 @@ function SignUpScreen({ onSignUp, onGoToLogin }: { onSignUp: () => void, onGoToL
   };
 
   const handleSignUpWithCode = async () => {
-    if (!email || !verificationCode) {
+    if (!email || !verificationCode || !verificationId) {
       setError('请输入邮箱和验证码');
       return;
     }
     setIsLoading(true);
     setError('');
     try {
-      await auth.signInWithEmail({
-        email: email,
-        verificationCode: verificationCode
+      const verificationTokenRes = await auth.verify({
+        verification_id: verificationId,
+        verification_code: verificationCode
+      });
+      
+      await auth.signIn({
+        username: email,
+        verification_token: verificationTokenRes.verification_token
       });
       alert('注册成功！请登录您的邮箱点击验证链接激活账号');
       onGoToLogin();
