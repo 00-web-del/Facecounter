@@ -1,6 +1,7 @@
 import { GoogleGenAI } from "@google/genai";
 
-const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY || "" });
+const GEMINI_API_KEY = "AIzaSyBEJtHM6Srp0AK2VcV3Glr1Ewikpgqhw2I";
+const ai = new GoogleGenAI({ apiKey: GEMINI_API_KEY });
 
 export async function getAIResponse(messages: { role: string; content: string }[], systemInstruction: string) {
   const model = ai.models.generateContent({
