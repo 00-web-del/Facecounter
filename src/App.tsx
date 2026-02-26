@@ -42,6 +42,9 @@ export default function App() {
   const [resumeAnalysis, setResumeAnalysis] = useState<any>(null);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
 
+  // 判断是否需要显示底部导航栏
+  const showBottomNav = [Screen.HOME, Screen.ANALYSIS, Screen.QUESTION_BANK, Screen.SETTINGS].includes(currentScreen);
+
   const renderScreen = () => {
     switch (currentScreen) {
       case Screen.LOGIN:
@@ -91,19 +94,25 @@ export default function App() {
   };
 
   return (
-    <div className="max-w-md mx-auto min-h-screen bg-slate-50 flex flex-col shadow-xl">
-      <AnimatePresence mode="wait">
-        <motion.div
-          key={currentScreen}
-          initial={{ opacity: 0, x: 20 }}
-          animate={{ opacity: 1, x: 0 }}
-          exit={{ opacity: 0, x: -20 }}
-          transition={{ duration: 0.2 }}
-          className="flex-1 flex flex-col"
-        >
-          {renderScreen()}
-        </motion.div>
-      </AnimatePresence>
+    <div className="max-w-md mx-auto h-screen bg-slate-50 flex flex-col shadow-xl overflow-hidden relative">
+      <div className="flex-1 overflow-hidden flex flex-col relative">
+        <AnimatePresence mode="wait">
+          <motion.div
+            key={currentScreen}
+            initial={{ opacity: 0, x: 10 }}
+            animate={{ opacity: 1, x: 0 }}
+            exit={{ opacity: 0, x: -10 }}
+            transition={{ duration: 0.15 }}
+            className="absolute inset-0 flex flex-col"
+          >
+            {renderScreen()}
+          </motion.div>
+        </AnimatePresence>
+      </div>
+      
+      {showBottomNav && (
+        <BottomNav currentScreen={currentScreen} onNavigate={(s) => setCurrentScreen(s)} />
+      )}
     </div>
   );
 }
@@ -178,6 +187,30 @@ function SignUpScreen({ onSignUp, onGoToLogin }: { onSignUp: () => void, onGoToL
   );
 }
 
+// --- 公用组件 ---
+function BottomNav({ currentScreen, onNavigate }: { currentScreen: Screen, onNavigate: (s: Screen) => void }) {
+  return (
+    <nav className="bg-white border-t py-2 flex justify-around sticky bottom-0">
+      <button onClick={() => onNavigate(Screen.HOME)} className={`flex flex-col items-center ${currentScreen === Screen.HOME ? 'text-blue-500' : 'text-slate-400'}`}>
+        <HomeIcon size={24} />
+        <span className="text-xs">主页</span>
+      </button>
+      <button onClick={() => onNavigate(Screen.ANALYSIS)} className={`flex flex-col items-center ${currentScreen === Screen.ANALYSIS ? 'text-blue-500' : 'text-slate-400'}`}>
+        <Equalizer size={24} />
+        <span className="text-xs">分析</span>
+      </button>
+      <button onClick={() => onNavigate(Screen.QUESTION_BANK)} className={`flex flex-col items-center ${currentScreen === Screen.QUESTION_BANK ? 'text-blue-500' : 'text-slate-400'}`}>
+        <Book size={24} />
+        <span className="text-xs">题库</span>
+      </button>
+      <button onClick={() => onNavigate(Screen.SETTINGS)} className={`flex flex-col items-center ${currentScreen === Screen.SETTINGS ? 'text-blue-500' : 'text-slate-400'}`}>
+        <Settings size={24} />
+        <span className="text-xs">设置</span>
+      </button>
+    </nav>
+  );
+}
+
 // 首页
 function HomeScreen({ onNavigate, onAnalysisStart, onAnalysisComplete, isAnalyzing }: { 
   onNavigate: (s: Screen) => void, 
@@ -232,9 +265,9 @@ function HomeScreen({ onNavigate, onAnalysisStart, onAnalysisComplete, isAnalyzi
   };
 
   return (
-    <div className="flex flex-col h-full">
+    <div className="flex flex-col h-full overflow-hidden">
       {/* 头部 */}
-      <header className="bg-white border-b px-4 h-16 flex items-center justify-between sticky top-0 z-10">
+      <header className="bg-white border-b px-4 h-16 flex items-center justify-between shrink-0">
         <div className="flex items-center gap-2">
           <div className="bg-blue-500 p-1.5 rounded-lg text-white">
             <Psychology size={24} />
@@ -338,26 +371,6 @@ function HomeScreen({ onNavigate, onAnalysisStart, onAnalysisComplete, isAnalyzi
           </div>
         </div>
       </main>
-
-      {/* 底部导航 */}
-      <nav className="bg-white border-t py-2 flex justify-around sticky bottom-0">
-        <button onClick={() => onNavigate(Screen.HOME)} className="flex flex-col items-center text-blue-500">
-          <HomeIcon size={24} />
-          <span className="text-xs">主页</span>
-        </button>
-        <button onClick={() => onNavigate(Screen.ANALYSIS)} className="flex flex-col items-center text-slate-400">
-          <Equalizer size={24} />
-          <span className="text-xs">分析</span>
-        </button>
-        <button onClick={() => onNavigate(Screen.QUESTION_BANK)} className="flex flex-col items-center text-slate-400">
-          <Book size={24} />
-          <span className="text-xs">题库</span>
-        </button>
-        <button onClick={() => onNavigate(Screen.SETTINGS)} className="flex flex-col items-center text-slate-400">
-          <Settings size={24} />
-          <span className="text-xs">设置</span>
-        </button>
-      </nav>
     </div>
   );
 }
@@ -453,14 +466,14 @@ function ResumeAnalysisScreen({ data, onBack }: { data: any, onBack: () => void 
 // 分析页
 function AnalysisScreen({ onBack }: { onBack: () => void }) {
   return (
-    <div className="flex flex-col h-full">
-      <header className="bg-white border-b px-4 h-16 flex items-center gap-4">
+    <div className="flex flex-col h-full overflow-hidden">
+      <header className="bg-white border-b px-4 h-16 flex items-center gap-4 shrink-0">
         <button onClick={onBack} className="text-slate-600">
           <ArrowBack size={24} />
         </button>
         <h1 className="text-lg font-bold">能力分析</h1>
       </header>
-      <main className="flex-1 p-4">
+      <main className="flex-1 p-4 overflow-y-auto">
         <div className="bg-white rounded-2xl p-6 mb-4 shadow-sm">
           <h3 className="font-bold mb-4">核心能力分布</h3>
           <div className="space-y-4">
@@ -490,14 +503,14 @@ function AnalysisScreen({ onBack }: { onBack: () => void }) {
 // 题库页
 function QuestionBankScreen({ onBack }: { onBack: () => void }) {
   return (
-    <div className="flex flex-col h-full">
-      <header className="bg-white border-b px-4 h-16 flex items-center gap-4">
+    <div className="flex flex-col h-full overflow-hidden">
+      <header className="bg-white border-b px-4 h-16 flex items-center gap-4 shrink-0">
         <button onClick={onBack} className="text-slate-600">
           <ArrowBack size={24} />
         </button>
         <h1 className="text-lg font-bold">面试题库</h1>
       </header>
-      <main className="flex-1 p-4">
+      <main className="flex-1 p-4 overflow-y-auto">
         <div className="space-y-3">
           {['通用行为面试', '软件工程', '产品经理', 'UI/UX设计'].map(cat => (
             <div key={cat} className="bg-white p-4 rounded-xl shadow-sm flex items-center justify-between active:bg-slate-50">
@@ -522,14 +535,14 @@ function QuestionBankScreen({ onBack }: { onBack: () => void }) {
 // 设置页
 function SettingsScreen({ onBack, onLogout }: { onBack: () => void, onLogout: () => void }) {
   return (
-    <div className="flex flex-col h-full">
-      <header className="bg-white border-b px-4 h-16 flex items-center gap-4">
+    <div className="flex flex-col h-full overflow-hidden">
+      <header className="bg-white border-b px-4 h-16 flex items-center gap-4 shrink-0">
         <button onClick={onBack} className="text-slate-600">
           <ArrowBack size={24} />
         </button>
         <h1 className="text-lg font-bold">设置</h1>
       </header>
-      <main className="flex-1 p-4">
+      <main className="flex-1 p-4 overflow-y-auto">
         <div className="bg-white rounded-2xl p-6 mb-6 flex items-center gap-4 shadow-sm">
           <div className="w-16 h-16 bg-blue-100 rounded-full flex items-center justify-center text-blue-600">
             <AccountCircle size={32} />
