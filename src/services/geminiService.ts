@@ -52,3 +52,26 @@ export async function getInterviewFeedback(messages: { role: string; content: st
     return null;
   }
 }
+
+export async function getResumeAnalysis(resumeText: string) {
+  if (!ai) return null;
+  const response = await ai.models.generateContent({
+    model: "gemini-3-flash-preview",
+    contents: [
+      {
+        role: "user",
+        parts: [{ text: "请分析以下简历内容，并提供：1. 核心技能总结；2. 简历亮点；3. 改进建议；4. 适合的职位推荐。请以 JSON 格式返回，包含字段：skills (array), highlights (array), suggestions (array), roles (array)。简历内容：" + resumeText }]
+      }
+    ],
+    config: {
+      responseMimeType: "application/json",
+    }
+  });
+
+  try {
+    return JSON.parse(response.text || "{}");
+  } catch (e) {
+    console.error("Failed to parse resume analysis JSON:", e);
+    return null;
+  }
+}

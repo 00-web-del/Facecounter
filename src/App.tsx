@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import {
   Home as HomeIcon,
@@ -12,8 +12,18 @@ import {
   Terminal,
   ArrowBack,
   Login as LoginIcon,
-  Visibility
+  Visibility,
+  Check,
+  Lightbulb,
+  Verified,
+  Description
 } from './components/Icons';
+import * as pdfjs from 'pdfjs-dist';
+import mammoth from 'mammoth';
+import { getResumeAnalysis } from './services/geminiService';
+
+// Set worker source for pdfjs
+pdfjs.GlobalWorkerOptions.workerSrc = `//cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjs.version}/pdf.worker.min.js`;
 
 // 定义屏幕枚举
 enum Screen {
@@ -23,11 +33,14 @@ enum Screen {
   ANALYSIS = "ANALYSIS",
   QUESTION_BANK = "QUESTION_BANK",
   SETTINGS = "SETTINGS",
+  RESUME_ANALYSIS = "RESUME_ANALYSIS",
 }
 
 export default function App() {
   // 初始进入登录页
   const [currentScreen, setCurrentScreen] = useState<Screen>(Screen.LOGIN);
+  const [resumeAnalysis, setResumeAnalysis] = useState<any>(null);
+  const [isAnalyzing, setIsAnalyzing] = useState(false);
 
   const renderScreen = () => {
     switch (currentScreen) {
@@ -42,7 +55,21 @@ export default function App() {
           onGoToLogin={() => setCurrentScreen(Screen.LOGIN)} 
         />;
       case Screen.HOME:
-        return <HomeScreen onNavigate={(s) => setCurrentScreen(s)} />;
+        return <HomeScreen 
+          onNavigate={(s) => setCurrentScreen(s)} 
+          onAnalysisStart={() => setIsAnalyzing(true)}
+          onAnalysisComplete={(data) => {
+            setResumeAnalysis(data);
+            setIsAnalyzing(false);
+            setCurrentScreen(Screen.RESUME_ANALYSIS);
+          }}
+          isAnalyzing={isAnalyzing}
+        />;
+      case Screen.RESUME_ANALYSIS:
+        return <ResumeAnalysisScreen 
+          data={resumeAnalysis} 
+          onBack={() => setCurrentScreen(Screen.HOME)} 
+        />;
       case Screen.ANALYSIS:
         return <AnalysisScreen onBack={() => setCurrentScreen(Screen.HOME)} />;
       case Screen.QUESTION_BANK:
@@ -50,7 +77,16 @@ export default function App() {
       case Screen.SETTINGS:
         return <SettingsScreen onBack={() => setCurrentScreen(Screen.HOME)} onLogout={() => setCurrentScreen(Screen.LOGIN)} />;
       default:
-        return <HomeScreen onNavigate={(s) => setCurrentScreen(s)} />;
+        return <HomeScreen 
+          onNavigate={(s) => setCurrentScreen(s)} 
+          onAnalysisStart={() => setIsAnalyzing(true)}
+          onAnalysisComplete={(data) => {
+            setResumeAnalysis(data);
+            setIsAnalyzing(false);
+            setCurrentScreen(Screen.RESUME_ANALYSIS);
+          }}
+          isAnalyzing={isAnalyzing}
+        />;
     }
   };
 
@@ -143,7 +179,58 @@ function SignUpScreen({ onSignUp, onGoToLogin }: { onSignUp: () => void, onGoToL
 }
 
 // 首页
-function HomeScreen({ onNavigate }: { onNavigate: (s: Screen) => void }) {
+function HomeScreen({ onNavigate, onAnalysisStart, onAnalysisComplete, isAnalyzing }: { 
+  onNavigate: (s: Screen) => void, 
+  onAnalysisStart: () => void,
+  onAnalysisComplete: (data: any) => void,
+  isAnalyzing: boolean
+}) {
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    onAnalysisStart();
+    try {
+      let text = '';
+      if (file.type === 'application/pdf') {
+        const arrayBuffer = await file.arrayBuffer();
+        const pdf = await pdfjs.getDocument({ data: arrayBuffer }).promise;
+        let fullText = '';
+        for (let i = 1; i <= pdf.numPages; i++) {
+          const page = await pdf.getPage(i);
+          const content = await page.getTextContent();
+          const strings = content.items.map((item: any) => item.str);
+          fullText += strings.join(' ') + '\n';
+        }
+        text = fullText;
+      } else if (file.type === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document') {
+        const arrayBuffer = await file.arrayBuffer();
+        const result = await mammoth.extractRawText({ arrayBuffer });
+        text = result.value;
+      } else {
+        alert('目前仅支持 PDF 和 DOCX 格式');
+        onAnalysisComplete(null);
+        return;
+      }
+
+      if (text.trim()) {
+        const analysis = await getResumeAnalysis(text);
+        onAnalysisComplete(analysis);
+      } else {
+        alert('无法从文件中提取文字，请确保文件内容可读。');
+        onAnalysisComplete(null);
+      }
+    } catch (error) {
+      console.error('File upload error:', error);
+      alert('解析文件时出错，请重试。');
+      onAnalysisComplete(null);
+    } finally {
+      if (fileInputRef.current) fileInputRef.current.value = '';
+    }
+  };
+
   return (
     <div className="flex flex-col h-full">
       {/* 头部 */}
@@ -162,20 +249,38 @@ function HomeScreen({ onNavigate }: { onNavigate: (s: Screen) => void }) {
       {/* 主要内容 */}
       <main className="flex-1 p-4 overflow-y-auto">
         {/* 上传简历卡片 */}
-        <div className="bg-white rounded-2xl p-6 mb-6 border-2 border-dashed border-blue-200 text-center">
+        <div className="bg-white rounded-2xl p-6 mb-6 border-2 border-dashed border-blue-200 text-center relative">
+          {isAnalyzing && (
+            <div className="absolute inset-0 bg-white/80 backdrop-blur-sm z-20 flex flex-col items-center justify-center rounded-2xl">
+              <div className="w-10 h-10 border-4 border-blue-500 border-t-transparent rounded-full animate-spin mb-4"></div>
+              <p className="text-blue-600 font-bold">AI 正在深度分析简历...</p>
+            </div>
+          )}
           <div className="flex justify-center gap-4 mb-4">
             <div className="w-16 h-20 bg-red-50 rounded-lg flex flex-col items-center justify-center text-red-500">
-              <UploadFile size={32} />
+              <Description size={32} />
               <span className="text-xs font-bold mt-1">PDF</span>
             </div>
-            <div className="w-16 h-20 bg-blue-50 rounded-lg flex flex-col items-center justify-center text-blue-500">
-              <UploadFile size={32} />
+            <div className="w-16 h-20 bg-blue-50 rounded-lg flex flex-col items-center justify-center text-blue-600">
+              <Description size={32} />
               <span className="text-xs font-bold mt-1">WORD</span>
             </div>
           </div>
           <h2 className="text-xl font-bold mb-2">为您的职场飞跃做好准备</h2>
           <p className="text-slate-500 text-sm mb-4">AI会分析您的简历，生成个性化面试题目</p>
-          <button className="w-full bg-blue-500 text-white font-bold py-3 rounded-xl shadow-md">
+          
+          <input 
+            type="file" 
+            ref={fileInputRef} 
+            onChange={handleFileUpload} 
+            accept=".pdf,.docx" 
+            className="hidden" 
+          />
+          
+          <button 
+            onClick={() => fileInputRef.current?.click()}
+            className="w-full bg-blue-500 text-white font-bold py-3 rounded-xl shadow-md active:scale-95 transition-all"
+          >
             <UploadFile size={20} className="inline mr-2" /> 上传简历
           </button>
           <p className="text-xs text-slate-400 mt-2">支持 PDF, DOCX (最大 5MB)</p>
@@ -253,6 +358,94 @@ function HomeScreen({ onNavigate }: { onNavigate: (s: Screen) => void }) {
           <span className="text-xs">设置</span>
         </button>
       </nav>
+    </div>
+  );
+}
+
+// 简历分析页
+function ResumeAnalysisScreen({ data, onBack }: { data: any, onBack: () => void }) {
+  if (!data) return (
+    <div className="flex flex-col items-center justify-center h-full p-6 text-center">
+      <p className="text-slate-500 mb-4">分析失败，请重试</p>
+      <button onClick={onBack} className="text-blue-500 font-bold">返回主页</button>
+    </div>
+  );
+
+  return (
+    <div className="flex flex-col h-full bg-slate-50">
+      <header className="bg-white border-b px-4 h-16 flex items-center gap-4 sticky top-0 z-10">
+        <button onClick={onBack} className="text-slate-600">
+          <ArrowBack size={24} />
+        </button>
+        <h1 className="text-lg font-bold">简历深度分析</h1>
+      </header>
+      
+      <main className="flex-1 p-4 overflow-y-auto space-y-4">
+        {/* 核心技能 */}
+        <section className="bg-white rounded-2xl p-5 shadow-sm">
+          <h3 className="font-bold text-slate-800 mb-3 flex items-center gap-2">
+            <Verified size={20} className="text-blue-500" /> 核心技能总结
+          </h3>
+          <div className="flex flex-wrap gap-2">
+            {data.skills?.map((skill: string) => (
+              <span key={skill} className="px-3 py-1 bg-blue-50 text-blue-600 text-xs font-bold rounded-full border border-blue-100">
+                {skill}
+              </span>
+            ))}
+          </div>
+        </section>
+
+        {/* 简历亮点 */}
+        <section className="bg-white rounded-2xl p-5 shadow-sm">
+          <h3 className="font-bold text-slate-800 mb-3 flex items-center gap-2">
+            <Verified size={20} className="text-green-500" /> 简历亮点
+          </h3>
+          <ul className="space-y-2">
+            {data.highlights?.map((item: string, i: number) => (
+              <li key={i} className="text-sm text-slate-600 flex gap-2">
+                <div className="w-1.5 h-1.5 bg-green-500 rounded-full mt-1.5 shrink-0"></div>
+                {item}
+              </li>
+            ))}
+          </ul>
+        </section>
+
+        {/* 改进建议 */}
+        <section className="bg-white rounded-2xl p-5 shadow-sm">
+          <h3 className="font-bold text-slate-800 mb-3 flex items-center gap-2">
+            <Lightbulb size={20} className="text-orange-500" /> 改进建议
+          </h3>
+          <ul className="space-y-2">
+            {data.suggestions?.map((item: string, i: number) => (
+              <li key={i} className="text-sm text-slate-600 flex gap-2">
+                <div className="w-1.5 h-1.5 bg-orange-500 rounded-full mt-1.5 shrink-0"></div>
+                {item}
+              </li>
+            ))}
+          </ul>
+        </section>
+
+        {/* 职位推荐 */}
+        <section className="bg-white rounded-2xl p-5 shadow-sm">
+          <h3 className="font-bold text-slate-800 mb-3 flex items-center gap-2">
+            <Psychology size={20} className="text-purple-500" /> 适合职位推荐
+          </h3>
+          <div className="grid grid-cols-2 gap-2">
+            {data.roles?.map((role: string) => (
+              <div key={role} className="p-3 bg-purple-50 text-purple-700 text-xs font-bold rounded-xl border border-purple-100 text-center">
+                {role}
+              </div>
+            ))}
+          </div>
+        </section>
+
+        <button 
+          onClick={onBack}
+          className="w-full bg-blue-500 text-white font-bold py-4 rounded-2xl shadow-lg shadow-blue-500/20 mt-4"
+        >
+          开始针对性练习
+        </button>
+      </main>
     </div>
   );
 }
