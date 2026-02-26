@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import {
   Home as HomeIcon,
@@ -12,11 +12,15 @@ import {
   Terminal,
   Analytics,
   Brush,
-  ArrowBack
+  ArrowBack,
+  Login as LoginIcon,
+  Visibility
 } from './components/Icons';
 
 // 定义屏幕枚举
 enum Screen {
+  LOGIN = "LOGIN",
+  SIGNUP = "SIGNUP",
   HOME = "HOME",
   ANALYSIS = "ANALYSIS",
   QUESTION_BANK = "QUESTION_BANK",
@@ -24,23 +28,79 @@ enum Screen {
 }
 
 export default function App() {
-  // 直接进入首页
-  const [currentScreen, setCurrentScreen] = useState<Screen>(Screen.HOME);
+  // 初始进入登录页
+  const [currentScreen, setCurrentScreen] = useState<Screen>(Screen.LOGIN);
+  const [user, setUser] = useState<{ id: string, email: string } | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+
+  // 检查登录状态
+  useEffect(() => {
+    checkAuth();
+  }, []);
+
+  const checkAuth = async () => {
+    try {
+      const res = await fetch('/api/auth/me');
+      if (res.ok) {
+        const data = await res.json();
+        setUser(data.user);
+        setCurrentScreen(Screen.HOME);
+      }
+    } catch (error) {
+      console.error('Auth check failed:', error);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleLogout = async () => {
+    try {
+      await fetch('/api/auth/logout', { method: 'POST' });
+      setUser(null);
+      setCurrentScreen(Screen.LOGIN);
+    } catch (error) {
+      console.error('Logout failed:', error);
+    }
+  };
 
   const renderScreen = () => {
     switch (currentScreen) {
+      case Screen.LOGIN:
+        return <LoginScreen 
+          onLogin={(userData) => {
+            setUser(userData);
+            setCurrentScreen(Screen.HOME);
+          }} 
+          onGoToSignUp={() => setCurrentScreen(Screen.SIGNUP)} 
+        />;
+      case Screen.SIGNUP:
+        return <SignUpScreen 
+          onSignUp={(userData) => {
+            setUser(userData);
+            setCurrentScreen(Screen.HOME);
+          }} 
+          onGoToLogin={() => setCurrentScreen(Screen.LOGIN)} 
+        />;
       case Screen.HOME:
-        return <HomeScreen onNavigate={(s) => setCurrentScreen(s)} />;
+        return <HomeScreen onNavigate={(s) => setCurrentScreen(s)} onLogout={handleLogout} />;
       case Screen.ANALYSIS:
         return <AnalysisScreen onBack={() => setCurrentScreen(Screen.HOME)} />;
       case Screen.QUESTION_BANK:
         return <QuestionBankScreen onBack={() => setCurrentScreen(Screen.HOME)} />;
       case Screen.SETTINGS:
-        return <SettingsScreen onBack={() => setCurrentScreen(Screen.HOME)} />;
+        return <SettingsScreen onBack={() => setCurrentScreen(Screen.HOME)} onLogout={handleLogout} />;
       default:
-        return <HomeScreen onNavigate={(s) => setCurrentScreen(s)} />;
+        return <HomeScreen onNavigate={(s) => setCurrentScreen(s)} onLogout={handleLogout} />;
     }
   };
+
+  if (isLoading) {
+    return (
+      <div className="max-w-md mx-auto min-h-screen bg-white flex items-center justify-center">
+        <div className="w-10 h-10 border-4 border-blue-500 border-t-transparent rounded-full animate-spin"></div>
+      </div>
+    );
+  }
 
   return (
     <div className="max-w-md mx-auto min-h-screen bg-slate-50 flex flex-col">
@@ -60,8 +120,170 @@ export default function App() {
   );
 }
 
+// --- 登录界面 ---
+function LoginScreen({ onLogin, onGoToSignUp }: { onLogin: (user: any) => void, onGoToSignUp: () => void }) {
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [error, setError] = useState('');
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
+  const handleSubmit = async () => {
+    if (!email || !password) return;
+    setIsSubmitting(true);
+    setError('');
+    try {
+      const res = await fetch('/api/auth/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, password })
+      });
+      const data = await res.json();
+      if (res.ok) {
+        onLogin(data.user);
+      } else {
+        setError(data.error || '登录失败');
+      }
+    } catch (err) {
+      setError('网络错误，请重试');
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  return (
+    <div className="flex flex-col items-center justify-center p-6 h-full min-h-screen">
+      <div className="w-full bg-white rounded-2xl shadow-xl border border-slate-200 overflow-hidden">
+        <div className="p-8">
+          <div className="text-center mb-8">
+            <div className="bg-blue-500 w-12 h-12 rounded-xl flex items-center justify-center text-white mx-auto mb-4">
+              <Psychology size={32} />
+            </div>
+            <h1 className="text-2xl font-bold mb-2">欢迎回来</h1>
+            <p className="text-slate-500 text-sm">登录以继续您的面试练习</p>
+          </div>
+          
+          {error && <div className="mb-4 p-3 bg-red-50 text-red-600 text-xs rounded-lg">{error}</div>}
+          
+          <div className="space-y-4">
+            <div>
+              <label className="block text-sm font-semibold mb-1">邮箱</label>
+              <input 
+                className="w-full h-12 px-4 rounded-lg border border-slate-300 focus:ring-2 focus:ring-blue-500 outline-none" 
+                placeholder="您的邮箱" 
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-semibold mb-1">密码</label>
+              <input 
+                className="w-full h-12 px-4 rounded-lg border border-slate-300 focus:ring-2 focus:ring-blue-500 outline-none" 
+                type="password"
+                placeholder="您的密码" 
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+              />
+            </div>
+            <button 
+              onClick={handleSubmit}
+              disabled={isSubmitting}
+              className="w-full h-12 bg-blue-500 text-white font-bold rounded-lg shadow-lg shadow-blue-500/20 disabled:opacity-50"
+            >
+              {isSubmitting ? '登录中...' : '登录'}
+            </button>
+          </div>
+        </div>
+        <div className="bg-slate-50 py-4 text-center border-t">
+          <p className="text-sm text-slate-500">还没有账号？ <button onClick={onGoToSignUp} className="text-blue-500 font-bold">立即注册</button></p>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// --- 注册界面 ---
+function SignUpScreen({ onSignUp, onGoToLogin }: { onSignUp: (user: any) => void, onGoToLogin: () => void }) {
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [error, setError] = useState('');
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
+  const handleSubmit = async () => {
+    if (!email || !password) return;
+    setIsSubmitting(true);
+    setError('');
+    try {
+      const res = await fetch('/api/auth/signup', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, password })
+      });
+      const data = await res.json();
+      if (res.ok) {
+        onSignUp(data.user);
+      } else {
+        setError(data.error || '注册失败');
+      }
+    } catch (err) {
+      setError('网络错误，请重试');
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  return (
+    <div className="flex flex-col items-center justify-center p-6 h-full min-h-screen">
+      <div className="w-full bg-white rounded-2xl shadow-xl border border-slate-200 overflow-hidden">
+        <div className="p-8">
+          <div className="text-center mb-8">
+            <div className="bg-blue-500 w-12 h-12 rounded-xl flex items-center justify-center text-white mx-auto mb-4">
+              <Psychology size={32} />
+            </div>
+            <h1 className="text-2xl font-bold mb-2">创建账号</h1>
+            <p className="text-slate-500 text-sm">开启您的 AI 面试教练之旅</p>
+          </div>
+          
+          {error && <div className="mb-4 p-3 bg-red-50 text-red-600 text-xs rounded-lg">{error}</div>}
+          
+          <div className="space-y-4">
+            <div>
+              <label className="block text-sm font-semibold mb-1">邮箱</label>
+              <input 
+                className="w-full h-12 px-4 rounded-lg border border-slate-300 focus:ring-2 focus:ring-blue-500 outline-none" 
+                placeholder="您的邮箱" 
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-semibold mb-1">密码</label>
+              <input 
+                className="w-full h-12 px-4 rounded-lg border border-slate-300 focus:ring-2 focus:ring-blue-500 outline-none" 
+                type="password"
+                placeholder="设置密码" 
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+              />
+            </div>
+            <button 
+              onClick={handleSubmit}
+              disabled={isSubmitting}
+              className="w-full h-12 bg-blue-500 text-white font-bold rounded-lg shadow-lg shadow-blue-500/20 disabled:opacity-50"
+            >
+              {isSubmitting ? '注册中...' : '注册'}
+            </button>
+          </div>
+        </div>
+        <div className="bg-slate-50 py-4 text-center border-t">
+          <p className="text-sm text-slate-500">已有账号？ <button onClick={onGoToLogin} className="text-blue-500 font-bold">立即登录</button></p>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // 首页
-function HomeScreen({ onNavigate }: { onNavigate: (s: Screen) => void }) {
+function HomeScreen({ onNavigate, onLogout }: { onNavigate: (s: Screen) => void, onLogout: () => void }) {
   return (
     <div className="flex flex-col h-full">
       {/* 头部 */}
@@ -72,7 +294,7 @@ function HomeScreen({ onNavigate }: { onNavigate: (s: Screen) => void }) {
           </div>
           <h1 className="text-lg font-bold">Facecounter</h1>
         </div>
-        <button className="text-slate-500">
+        <button onClick={onLogout} className="text-slate-500">
           <AccountCircle size={24} />
         </button>
       </header>
@@ -245,7 +467,7 @@ function QuestionBankScreen({ onBack }: { onBack: () => void }) {
 }
 
 // 设置页
-function SettingsScreen({ onBack }: { onBack: () => void }) {
+function SettingsScreen({ onBack, onLogout }: { onBack: () => void, onLogout: () => void }) {
   return (
     <div className="flex flex-col h-full">
       <header className="bg-white border-b px-4 h-16 flex items-center gap-4">
@@ -260,8 +482,8 @@ function SettingsScreen({ onBack }: { onBack: () => void }) {
             <AccountCircle size={32} />
           </div>
           <div>
-            <h3 className="font-semibold">访客用户</h3>
-            <p className="text-sm text-slate-500">点击登录保存记录</p>
+            <h3 className="font-semibold">已登录用户</h3>
+            <p className="text-sm text-slate-500">欢迎回来练习</p>
           </div>
         </div>
         <div className="space-y-2">
@@ -271,6 +493,13 @@ function SettingsScreen({ onBack }: { onBack: () => void }) {
               <ChevronRight size={18} className="text-slate-400" />
             </button>
           ))}
+          <button 
+            onClick={onLogout}
+            className="w-full flex items-center justify-between p-4 bg-white rounded-xl shadow-sm text-red-500 mt-4"
+          >
+            <span>退出登录</span>
+            <ChevronRight size={18} className="text-red-400" />
+          </button>
         </div>
       </main>
     </div>
