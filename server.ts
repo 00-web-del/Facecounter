@@ -2,6 +2,7 @@ import express from 'express';
 import session from 'express-session';
 import bcrypt from 'bcryptjs';
 import Database from 'better-sqlite3';
+import { createClient } from '@supabase/supabase-js';
 import { createServer as createViteServer } from 'vite';
 import path from 'path';
 import { fileURLToPath } from 'url';
@@ -10,18 +11,31 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 const isVercel = process.env.VERCEL === '1';
-const dbPath = isVercel ? '/tmp/facecounter.db' : 'facecounter.db';
-const db = new Database(dbPath);
 
-// Initialize database
-db.exec(`
-  CREATE TABLE IF NOT EXISTS users (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    email TEXT UNIQUE,
-    password TEXT,
-    profile TEXT
-  )
-`);
+// --- Database Hybrid Logic ---
+const supabaseUrl = process.env.SUPABASE_URL;
+const supabaseKey = process.env.SUPABASE_ANON_KEY;
+const useSupabase = !!(supabaseUrl && supabaseKey);
+
+let db: any = null;
+let supabase: any = null;
+
+if (useSupabase) {
+  console.log('🚀 Using Supabase Cloud Database');
+  supabase = createClient(supabaseUrl!, supabaseKey!);
+} else {
+  console.log('🏠 Using Local SQLite Database');
+  const dbPath = isVercel ? '/tmp/facecounter.db' : 'facecounter.db';
+  db = new Database(dbPath);
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS users (
+      id TEXT PRIMARY KEY,
+      email TEXT UNIQUE,
+      password TEXT,
+      profile TEXT
+    )
+  `);
+}
 
 const app = express();
 const PORT = 3000;
@@ -91,14 +105,28 @@ app.get(['/auth/google/callback', '/auth/google/callback/'], async (req, res) =>
     });
     const googleUser = await userRes.json();
 
-    // Find or create user in DB
-    let user = db.prepare('SELECT * FROM users WHERE email = ?').get(googleUser.email) as any;
-    if (!user) {
-      const result = db.prepare('INSERT INTO users (email, profile) VALUES (?, ?)').run(
-        googleUser.email, 
-        JSON.stringify({ name: googleUser.name })
-      );
-      user = { id: result.lastInsertRowid, email: googleUser.email };
+    // Find or create user
+    let user: any = null;
+    if (useSupabase) {
+      const { data } = await supabase.from('users').select('*').eq('email', googleUser.email).single();
+      user = data;
+      if (!user) {
+        const { data: newUser, error } = await supabase
+          .from('users')
+          .insert([{ email: googleUser.email, profile: { name: googleUser.name } }])
+          .select().single();
+        if (error) throw error;
+        user = newUser;
+      }
+    } else {
+      user = db.prepare('SELECT * FROM users WHERE email = ?').get(googleUser.email);
+      if (!user) {
+        const id = Date.now().toString();
+        db.prepare('INSERT INTO users (id, email, profile) VALUES (?, ?, ?)').run(
+          id, googleUser.email, JSON.stringify({ name: googleUser.name })
+        );
+        user = { id, email: googleUser.email };
+      }
     }
 
     (req.session as any).userId = user.id;
@@ -127,37 +155,41 @@ app.get(['/auth/google/callback', '/auth/google/callback/'], async (req, res) =>
 // API Routes
 app.post('/api/auth/signup', async (req, res) => {
   const { email, password } = req.body;
-  if (!email || !password) {
-    return res.status(400).json({ error: 'Email and password are required' });
-  }
+  if (!email || !password) return res.status(400).json({ error: 'Email and password are required' });
 
   try {
     const hashedPassword = await bcrypt.hash(password, 10);
-    const stmt = db.prepare('INSERT INTO users (email, password) VALUES (?, ?)');
-    const result = stmt.run(email, hashedPassword);
-    
-    const user = { id: result.lastInsertRowid, email };
-    (req.session as any).userId = user.id;
-    
-    res.json({ message: 'User created successfully', user });
-  } catch (error: any) {
-    if (error.code === 'SQLITE_CONSTRAINT') {
-      res.status(400).json({ error: 'Email already exists' });
+    const id = Date.now().toString();
+
+    if (useSupabase) {
+      const { data, error } = await supabase.from('users').insert([{ email, password: hashedPassword }]).select().single();
+      if (error) return res.status(400).json({ error: error.code === '23505' ? 'Email already exists' : error.message });
+      (req.session as any).userId = data.id;
+      res.json({ message: 'User created', user: { id: data.id, email: data.email } });
     } else {
-      res.status(500).json({ error: 'Internal server error' });
+      try {
+        db.prepare('INSERT INTO users (id, email, password) VALUES (?, ?, ?)').run(id, email, hashedPassword);
+        (req.session as any).userId = id;
+        res.json({ message: 'User created', user: { id, email } });
+      } catch (e: any) {
+        res.status(400).json({ error: e.message.includes('UNIQUE') ? 'Email already exists' : 'Database error' });
+      }
     }
+  } catch (error) {
+    res.status(500).json({ error: 'Internal server error' });
   }
 });
 
 app.post('/api/auth/login', async (req, res) => {
   const { email, password } = req.body;
-  if (!email || !password) {
-    return res.status(400).json({ error: 'Email and password are required' });
-  }
-
   try {
-    const stmt = db.prepare('SELECT * FROM users WHERE email = ?');
-    const user = stmt.get(email) as any;
+    let user: any = null;
+    if (useSupabase) {
+      const { data } = await supabase.from('users').select('*').eq('email', email).single();
+      user = data;
+    } else {
+      user = db.prepare('SELECT * FROM users WHERE email = ?').get(email);
+    }
 
     if (!user || !(await bcrypt.compare(password, user.password))) {
       return res.status(401).json({ error: 'Invalid email or password' });
@@ -165,41 +197,52 @@ app.post('/api/auth/login', async (req, res) => {
 
     (req.session as any).userId = user.id;
     res.json({ 
-      message: 'Login successful', 
       user: { id: user.id, email: user.email },
-      profile: user.profile ? JSON.parse(user.profile) : null
+      profile: typeof user.profile === 'string' ? JSON.parse(user.profile) : user.profile
     });
   } catch (error) {
     res.status(500).json({ error: 'Internal server error' });
   }
 });
 
-app.post('/api/user/profile', (req, res) => {
+app.post('/api/user/profile', async (req, res) => {
   const userId = (req.session as any).userId;
   if (!userId) return res.status(401).json({ error: 'Unauthorized' });
-
   const { profile } = req.body;
+
   try {
-    const stmt = db.prepare('UPDATE users SET profile = ? WHERE id = ?');
-    stmt.run(JSON.stringify(profile), userId);
-    res.json({ message: 'Profile updated successfully' });
+    if (useSupabase) {
+      await supabase.from('users').update({ profile }).eq('id', userId);
+    } else {
+      db.prepare('UPDATE users SET profile = ? WHERE id = ?').run(JSON.stringify(profile), userId);
+    }
+    res.json({ message: 'Profile updated' });
   } catch (error) {
     res.status(500).json({ error: 'Internal server error' });
   }
 });
 
-app.get('/api/auth/me', (req, res) => {
+app.get('/api/auth/me', async (req, res) => {
   const userId = (req.session as any).userId;
   if (!userId) return res.status(401).json({ error: 'Not logged in' });
 
-  const stmt = db.prepare('SELECT id, email, profile FROM users WHERE id = ?');
-  const user = stmt.get(userId) as any;
-  if (!user) return res.status(404).json({ error: 'User not found' });
+  try {
+    let user: any = null;
+    if (useSupabase) {
+      const { data } = await supabase.from('users').select('*').eq('id', userId).single();
+      user = data;
+    } else {
+      user = db.prepare('SELECT * FROM users WHERE id = ?').get(userId);
+    }
 
-  res.json({ 
-    user: { id: user.id, email: user.email },
-    profile: user.profile ? JSON.parse(user.profile) : null
-  });
+    if (!user) return res.status(404).json({ error: 'User not found' });
+    res.json({ 
+      user: { id: user.id, email: user.email },
+      profile: typeof user.profile === 'string' ? JSON.parse(user.profile) : user.profile
+    });
+  } catch (error) {
+    res.status(500).json({ error: 'Internal server error' });
+  }
 });
 
 app.post('/api/auth/logout', (req, res) => {
